@@ -1,0 +1,27 @@
+# AirSim Python API dependencies
+backports.ssl-match-hostname>=3.5.0.1
+msgpack-rpc-python>=0.4.1
+airsim>=1.8.1
+
+# Data processing and analysis
+numpy>=1.21.0
+pandas>=1.3.0
+opencv-python>=4.5.0
+Pillow>=8.3.0
+
+# Machine Learning (optional)
+tensorflow>=2.8.0
+torch>=1.11.0
+
+# Visualization
+matplotlib>=3.5.0
+seaborn>=0.11.0
+
+# Utilities
+tqdm>=4.62.0
+pyyaml>=6.0
+python-dotenv>=0.19.0
+
+# Data storage
+h5py>=3.6.0
+pytz>=2021.3
