@@ -47,9 +47,9 @@ class CirclePatrolDrone(Robot):
         self.time_step = int(self.getBasicTimeStep())
 
         # Mission parameters
-        self.target_center = [-50.35, 11.25]  # Center of circle
-        self.circle_radius = 30.0  # Radius in meters
-        self.target_altitude = 20.0  # Flight altitude
+        self.target_center = [-25.35, 0]  # Center of circle
+        self.circle_radius = 50.0  # Radius in meters
+        self.target_altitude = 40.0  # Flight altitude
         
         # Generate circle waypoints
         self.num_waypoints = 8  # Fewer waypoints = faster flight (was 36)
@@ -57,7 +57,7 @@ class CirclePatrolDrone(Robot):
         
         # Image capture
         self.last_image_time = 0
-        self.image_interval_seconds = 2.0
+        self.image_interval_seconds = 10.0
         self.images_dir = "circle_patrol_images"
         os.makedirs(self.images_dir, exist_ok=True)
 
