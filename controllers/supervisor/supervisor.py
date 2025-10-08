@@ -186,13 +186,26 @@ class LawnmowerMissionSupervisor(Supervisor):
             # Spawn single drone at spawn_position
             x, y, z = self.spawn_position
             
-            # Create drone definition string
+            # Create drone definition string with high-quality camera settings
             drone_def = f"""DEF DRONE_0 Mavic2Pro {{
   translation {x} {y} {z}
   rotation 0 0 1 0
   name "drone_0"
-  controller "patrol_dynamic"
+  controller "patrol_with_images"
   controllerArgs []
+  cameraSlot [
+    Camera {{
+      width 1920
+      height 1080
+      antiAliasing TRUE
+      motionBlur 0
+      noise 0
+      lens Lens {{
+        radialCoefficients 0 0
+        tangentialCoefficients 0 0
+      }}
+    }}
+  ]
 }}"""
             
             print(f"   📝 Creating drone_0 at spawn position...")
