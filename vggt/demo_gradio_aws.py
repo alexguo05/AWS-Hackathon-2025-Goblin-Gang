@@ -147,42 +147,32 @@ def run_model(target_dir, model) -> dict:
 
     with torch.no_grad():
         with torch.cuda.amp.autocast(dtype=dtype):
-            images = images[None]  # add batch dimension
-            aggregated_tokens_list, ps_idx = model.aggregator(images)
+            predictions = model(images)
 
-        # Predict Cameras
-        pose_enc = model.camera_head(aggregated_tokens_list)[-1]
-        # Extrinsic and intrinsic matrices, following OpenCV convention (camera from world)
-        extrinsic, intrinsic = pose_encoding_to_extri_intri(pose_enc, images.shape[-2:])
+    # Convert pose encoding to extrinsic and intrinsic matrices
+    print("Converting pose encoding to extrinsic and intrinsic matrices...")
+    extrinsic, intrinsic = pose_encoding_to_extri_intri(predictions["pose_enc"], images.shape[-2:])
+    predictions["extrinsic"] = extrinsic
+    predictions["intrinsic"] = intrinsic
 
-        # Predict Depth Maps
-        depth_map, depth_conf = model.depth_head(aggregated_tokens_list, images, ps_idx)
+    # Convert tensors to numpy
+    for key in predictions.keys():
+        if isinstance(predictions[key], torch.Tensor):
+            predictions[key] = predictions[key].cpu().numpy().squeeze(0)  # remove batch dimension
+    predictions['pose_enc_list'] = None  # remove pose_enc_list
 
-        # Predict Point Maps
-        point_map, point_conf = model.point_head(aggregated_tokens_list, images, ps_idx)
-
-        # Construct 3D Points from Depth Maps and Cameras
-        # which usually leads to more accurate 3D points than point map branch
-        point_map_by_unprojection = unproject_depth_map_to_point_map(
-            depth_map.squeeze(0), extrinsic.squeeze(0), intrinsic.squeeze(0)
-        )
-
-    # Save predictions
-    predictions = {
-        "pose_enc": pose_enc.cpu().numpy(),
-        "depth": depth_map.cpu().numpy(),
-        "depth_conf": depth_conf.cpu().numpy(),
-        "point_map": point_map.cpu().numpy(),
-        "point_conf": point_conf.cpu().numpy(),
-        "point_map_by_unprojection": point_map_by_unprojection.cpu().numpy(),
-        "extrinsic": extrinsic.cpu().numpy(),
-        "intrinsic": intrinsic.cpu().numpy(),
-    }
+    # Generate world points from depth map
+    print("Computing world points from depth map...")
+    depth_map = predictions["depth"]  # (S, H, W, 1)
+    world_points = unproject_depth_map_to_point_map(depth_map, predictions["extrinsic"], predictions["intrinsic"])
+    predictions["world_points_from_depth"] = world_points
 
     # Save to file
     np.savez(os.path.join(target_dir, "predictions.npz"), **predictions)
     print(f"Predictions saved to {target_dir}/predictions.npz")
 
+    # Clean up
+    torch.cuda.empty_cache()
     return predictions
 
 # -------------------------------------------------------------------------
@@ -206,7 +196,15 @@ def handle_uploads(input_video, input_images):
 
     if input_video is not None:
         # Extract frames from video
-        cap = cv2.VideoCapture(input_video)
+        # Handle different Gradio video formats
+        if isinstance(input_video, dict) and "name" in input_video:
+            video_path = input_video["name"]
+        elif isinstance(input_video, str):
+            video_path = input_video
+        else:
+            video_path = getattr(input_video, 'name', str(input_video))
+        
+        cap = cv2.VideoCapture(video_path)
         frame_count = 0
         fps = cap.get(cv2.CAP_PROP_FPS)
         frame_interval = max(1, int(fps))  # Extract one frame per second
@@ -228,9 +226,20 @@ def handle_uploads(input_video, input_images):
 
     if input_images is not None:
         # Copy uploaded images
-        for i, image_file in enumerate(input_images):
-            image_path = os.path.join(target_dir, "images", f"image_{i:04d}.jpg")
-            shutil.copy2(image_file, image_path)
+        for i, file_data in enumerate(input_images):
+            # Handle different Gradio file formats
+            if isinstance(file_data, dict) and "name" in file_data:
+                file_path = file_data["name"]
+            elif isinstance(file_data, str):
+                file_path = file_data
+            else:
+                # If it's a file object, get its name
+                file_path = getattr(file_data, 'name', str(file_data))
+            
+            # Determine extension from original file
+            ext = os.path.splitext(file_path)[1] or '.jpg'
+            image_path = os.path.join(target_dir, "images", f"image_{i:04d}{ext}")
+            shutil.copy2(file_path, image_path)
             image_paths.append(image_path)
 
     return target_dir, image_paths
@@ -321,17 +330,18 @@ def gradio_demo(
 
         # Generate GLB file
         glb_path = os.path.join(target_dir, "reconstruction.glb")
-        predictions_to_glb(
+        glbscene = predictions_to_glb(
             predictions,
-            glb_path,
             conf_thres=conf_thres,
-            frame_filter=frame_filter,
+            filter_by_frames=frame_filter,
             mask_black_bg=mask_black_bg,
             mask_white_bg=mask_white_bg,
             show_cam=show_cam,
             mask_sky=mask_sky,
+            target_dir=target_dir,
             prediction_mode=prediction_mode,
         )
+        glbscene.export(file_obj=glb_path)
 
         end_time = time.time()
         processing_time = end_time - start_time
@@ -339,12 +349,11 @@ def gradio_demo(
         return (
             glb_path,
             f"✅ Reconstruction completed in {processing_time:.2f} seconds! GLB file generated.",
-            frame_options,
-            image_names,
+            gr.Dropdown(choices=frame_options, value="All"),
         )
 
     except Exception as e:
-        return None, f"❌ Error during reconstruction: {str(e)}", None, None
+        return None, f"❌ Error during reconstruction: {str(e)}", gr.Dropdown(choices=["All"], value="All")
 
 def gradio_demo_with_s3_upload(
     target_dir,
@@ -362,7 +371,7 @@ def gradio_demo_with_s3_upload(
     Perform reconstruction and upload GLB to S3.
     """
     # First run the normal reconstruction
-    glb_path, message, frame_options, image_names = gradio_demo(
+    glb_path, message, frame_dropdown = gradio_demo(
         target_dir, conf_thres, frame_filter, mask_black_bg, 
         mask_white_bg, show_cam, mask_sky, prediction_mode
     )
@@ -385,7 +394,7 @@ def gradio_demo_with_s3_upload(
         except Exception as e:
             message += f"\n❌ S3 upload failed: {str(e)}"
     
-    return glb_path, message, frame_options, image_names
+    return glb_path, message, frame_dropdown
 
 def update_visualization(
     target_dir,
@@ -427,17 +436,18 @@ def update_visualization(
 
         # Generate new GLB with updated settings
         glb_path = os.path.join(target_dir, "reconstruction.glb")
-        predictions_to_glb(
+        glbscene = predictions_to_glb(
             predictions,
-            glb_path,
             conf_thres=conf_thres,
-            frame_filter=frame_filter,
+            filter_by_frames=frame_filter,
             mask_black_bg=mask_black_bg,
             mask_white_bg=mask_white_bg,
             show_cam=show_cam,
             mask_sky=mask_sky,
+            target_dir=target_dir,
             prediction_mode=prediction_mode,
         )
+        glbscene.export(file_obj=glb_path)
 
         return glb_path, "✅ Visualization updated!"
 
@@ -584,8 +594,14 @@ with gr.Blocks(
                     gr.Markdown("### S3 Bucket Selection")
                     bucket_name = gr.Textbox(
                         label="Enter S3 Bucket Name",
-                        placeholder="Enter your public bucket name (e.g., 64722)",
+                        placeholder="Enter your bucket name (e.g., vandyawshackathon2025)",
                         value=""
+                    )
+                    folder_prefix = gr.Textbox(
+                        label="Folder Path (Optional)",
+                        placeholder="e.g., Images/TestImages/circle_patrol_images/",
+                        value="",
+                        info="Leave empty to search entire bucket, or specify a folder path"
                     )
                     
                     # Image Selection
@@ -698,24 +714,28 @@ with gr.Blocks(
             mask_sky,
             prediction_mode,
         ],
-        outputs=[reconstruction_output, log_output, frame_filter, image_gallery],
+        outputs=[reconstruction_output, log_output, frame_filter],
     )
 
     # S3 images refresh
-    def refresh_s3_images(bucket):
+    def refresh_s3_images(bucket, prefix):
         if not bucket:
             return gr.CheckboxGroup(choices=[]), "Please enter a bucket name first"
         try:
-            images = list_public_bucket_images(bucket)
+            # Use the prefix if provided, otherwise search the entire bucket
+            images = list_public_bucket_images(bucket, prefix=prefix)
             if not images:
-                return gr.CheckboxGroup(choices=[]), f"No images found in bucket '{bucket}'"
-            return gr.CheckboxGroup(choices=images), f"Found {len(images)} images in bucket '{bucket}'"
+                search_location = f"'{bucket}/{prefix}'" if prefix else f"bucket '{bucket}'"
+                return gr.CheckboxGroup(choices=[]), f"No images found in {search_location}"
+            
+            search_location = f"'{bucket}/{prefix}'" if prefix else f"bucket '{bucket}'"
+            return gr.CheckboxGroup(choices=images), f"Found {len(images)} images in {search_location}"
         except Exception as e:
             return gr.CheckboxGroup(choices=[]), f"Error: {str(e)}"
     
     refresh_images_btn.click(
         fn=refresh_s3_images,
-        inputs=[bucket_name],
+        inputs=[bucket_name, folder_prefix],
         outputs=[image_keys, log_output]
     )
     
@@ -741,7 +761,7 @@ with gr.Blocks(
             mask_sky,
             prediction_mode,
         ],
-        outputs=[s3_reconstruction_output, log_output, frame_filter, s3_image_gallery],
+        outputs=[s3_reconstruction_output, log_output, frame_filter],
     )
     
     # Load existing GLB files
