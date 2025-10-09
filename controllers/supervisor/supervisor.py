@@ -21,7 +21,7 @@ class CirclePatrolMissionSupervisor(Supervisor):
         self.time_step = int(self.getBasicTimeStep())
         
         # Mission configuration
-        self.num_drones = 3  # Single drone for now
+        self.num_drones = 4  # Four drones for efficient coverage
         self.spawn_position = [0, 0, 0.3]  # Spawn location (always 0, 0)
         self.drones = []  # List to store drone references
         
@@ -133,9 +133,11 @@ class CirclePatrolMissionSupervisor(Supervisor):
         return tasks
     
     def partition_by_circle_round_robin(self, tasks, num_drones):
-        """Group tasks by circle_id and assign circles to drones in round-robin.
+        """Group tasks by circle_id and assign complete circles to drones in round-robin.
         Returns: {drone_index: [tasks...]}"""
         from collections import defaultdict
+        
+        # Group all tasks by circle_id
         circles = defaultdict(list)
         for t in tasks:
             cid = t.get('circle_id', 0)
@@ -144,14 +146,21 @@ class CirclePatrolMissionSupervisor(Supervisor):
         # Build empty buckets per drone
         buckets = {i: [] for i in range(num_drones)}
 
-        # Assign circles 1..N in round-robin; leave cid=0 (misc) to drone_0
-        circle_ids = sorted([c for c in circles.keys() if c != 0])
+        # Assign complete circles to drones in round-robin
+        # Only assign circles 1..N (skip circle 0 which is misc/transitionless)
+        circle_ids = sorted([c for c in circles.keys() if c > 0])
+        
+        print(f"\n📊 Circle assignment plan:")
         for i, cid in enumerate(circle_ids):
-            buckets[i % num_drones].extend(circles[cid])
+            drone_id = i % num_drones
+            circle_tasks = circles[cid]
+            buckets[drone_id].extend(circle_tasks)
+            print(f"   Circle {cid} ({len(circle_tasks)} tasks) → Drone {drone_id}")
 
-        # Any cid=0 (misc/transitionless) tasks go to drone_0
+        # Any circle 0 (misc/transitionless) tasks go to drone 0
         if 0 in circles:
             buckets[0].extend(circles[0])
+            print(f"   Circle 0 ({len(circles[0])} tasks) → Drone 0")
 
         return buckets
     
@@ -244,10 +253,14 @@ class CirclePatrolMissionSupervisor(Supervisor):
         all_tasks = self.generate_circle_tasks(drone_id=0)
 
         # 2) Partition tasks by circle (round-robin) across N drones
-        print(f"\n🧩 Partitioning {len(all_tasks)} tasks across {self.num_drones} drones (round-robin by circle)...")
+        print(f"\n🧩 Partitioning {len(all_tasks)} tasks across {self.num_drones} drones (complete circles)...")
         buckets = self.partition_by_circle_round_robin(all_tasks, self.num_drones)
+        
+        print(f"\n📋 Final assignment summary:")
         for i in range(self.num_drones):
-            print(f"   • Drone {i} gets {len(buckets[i])} tasks")
+            tasks = buckets[i]
+            circle_ids = set(task.get('circle_id', 0) for task in tasks)
+            print(f"   • Drone {i}: {len(tasks)} tasks covering circles {sorted(circle_ids)}")
 
         # 3) Write a JSON file per drone
         print("\n📤 Writing per-drone task files...")
