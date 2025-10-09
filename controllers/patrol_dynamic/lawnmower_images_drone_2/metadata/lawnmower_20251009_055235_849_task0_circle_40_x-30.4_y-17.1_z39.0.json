@@ -1,0 +1,34 @@
+{
+  "image_filename": "lawnmower_20251009_055235_849_task0_circle_40_x-30.4_y-17.1_z39.0.jpg",
+  "timestamp": "20251009_055235_849",
+  "task_index": 0,
+  "task_info": "circle_40",
+  "drone_position": {
+    "x": -30.39784774667053,
+    "y": -17.12057465455553,
+    "z": 38.99730788121393
+  },
+  "drone_orientation": {
+    "roll": 0.006117090506879225,
+    "pitch": 0.023098759469473283,
+    "yaw": -0.5540931785227862
+  },
+  "camera_orientation_absolute": {
+    "roll": 0.006117090506879225,
+    "pitch": 0.5230987594694733,
+    "yaw": 1.0167031482672138
+  },
+  "camera_orientation_relative": {
+    "pitch": 0.5,
+    "yaw": 1.57079632679
+  },
+  "camera_intrinsics": {
+    "fov_radians": 0.785398,
+    "fov_degrees": 44.99999063801583,
+    "focal_length_pixels": 2317.6455554371096,
+    "image_width": 1920,
+    "image_height": 1080,
+    "principal_point_x": 960.0,
+    "principal_point_y": 540.0
+  }
+}
