@@ -536,8 +536,7 @@ class TaskBasedCirclePatrolDrone(Robot):
                                     print(f"📸 Image capture ENABLED for Circle {circle_id}")
                                     print(f"{'='*70}\n")
                                     
-                                    # Enable image capture for circle patrol
-                                    self.capturing_images = True
+                                    # Image capture will happen at each waypoint
                                     
                                     # Set camera orientation if specified
                                     if 'camera_yaw' in task and 'camera_pitch' in task:
@@ -574,9 +573,7 @@ class TaskBasedCirclePatrolDrone(Robot):
                             # Mark first waypoint as reached for image capture
                             if not self.first_waypoint_reached:
                                 self.first_waypoint_reached = True
-                                print("✅ First waypoint reached! Starting image capture...")
-                                # Enable image capture for first circle
-                                self.capturing_images = True
+                                print("✅ First waypoint reached! Image capture enabled at waypoints.")
                             
                             # Update current circle tracking
                             if circle_id != self.current_circle_id:
@@ -599,6 +596,11 @@ class TaskBasedCirclePatrolDrone(Robot):
                                             task['camera_pitch']
                                         )
                                     
+                                    # Take picture immediately when waypoint is reached
+                                    if self.first_waypoint_reached:
+                                        print(f"📸 Taking picture at waypoint {waypoint_id}")
+                                        self.save_camera_image()
+                                    
                                     # Add to flight path
                                     self.flight_path.append(target_position)
                                     
@@ -614,10 +616,6 @@ class TaskBasedCirclePatrolDrone(Robot):
                                     next_task = self.get_current_task()
                                     if next_task is None or next_task.get('circle_id', 0) != circle_id:
                                         print(f"🏁 Completed Circle {circle_id} patrol!")
-                                        print(f"📸 Image capture DISABLED - transitioning between circles")
-                                        
-                                        # Disable image capture during transitions
-                                        self.capturing_images = False
                                         
                                         if next_task and next_task.get('type') == 'transition':
                                             print(f"🔄 Transitioning to Circle {next_task.get('circle_id', 0)}...")
@@ -652,12 +650,7 @@ class TaskBasedCirclePatrolDrone(Robot):
                     motor.setVelocity(0)
                 continue
 
-            # Save images periodically (ONLY during circle patrol, not during transitions)
-            if (self.first_waypoint_reached and 
-                self.capturing_images and 
-                current_time - self.last_image_time >= self.image_interval_seconds):
-                self.save_camera_image()
-                self.last_image_time = current_time
+            # Images are now taken only when waypoints are reached, not continuously
 
             # Show progress updates every 30 seconds
             if not hasattr(self, 'last_progress_time'):
