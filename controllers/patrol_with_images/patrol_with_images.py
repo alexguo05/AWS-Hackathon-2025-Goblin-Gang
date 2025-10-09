@@ -20,6 +20,7 @@ from controller import Robot
 import sys
 import os
 import json
+import time
 import cv2
 from datetime import datetime
 import math
@@ -59,13 +60,14 @@ class TaskBasedCirclePatrolDrone(Robot):
         self.target_altitude = 40.0  # Flight altitude
         self.num_waypoints = 8  # Number of waypoints per circle (should match supervisor)
         
-        # Task management (NEW - task-based system)
-        self.tasks = []  # Will be loaded from supervisor
-        self.current_task_index = 0
+        # Task management (NEW - centralized circle-based task system)
+        self.current_task = None  # Current circle task being executed
         self.task_state = "WAITING_FOR_TASKS"  # WAITING_FOR_TASKS -> EXECUTING -> COMPLETE
         self.current_circle_id = 0  # Track which circle we're currently flying
+        self.current_waypoint_index = 0  # Track current waypoint within circle
         self.flight_path = []  # Store flight path for visualization
         self.circle_data = {}  # Store detailed circle information
+        self.completed_tasks = []  # Track completed tasks
         
         # Flight state
         self.flight_phase = "TAKEOFF"  # TAKEOFF -> PATROL -> RETURN_HOME -> LANDING -> LANDED
@@ -83,72 +85,27 @@ class TaskBasedCirclePatrolDrone(Robot):
         self.target_position = [0, 0, 0]
         self.first_waypoint_reached = False  # Track when to start taking pictures
 
-        # Task communication directory (NEW - task system)
+        # Task communication directory (NEW - centralized task system)
         controller_dir = os.path.dirname(os.path.abspath(__file__))
         project_root = os.path.dirname(os.path.dirname(controller_dir))
         self.task_dir = os.path.join(project_root, "lawnmower_tasks")
         os.makedirs(self.task_dir, exist_ok=True)
-        self.task_file = os.path.join(self.task_dir, f"drone_{self.drone_id}_tasks.json")
+        self.task_pool_file = os.path.join(self.task_dir, "task_pool.json")
+        self.task_request_file = os.path.join(self.task_dir, f"drone_{self.drone_id}_request.json")
+        self.task_complete_file = os.path.join(self.task_dir, f"drone_{self.drone_id}_complete.json")
 
         # Initialize devices
         self._initialize_devices()
 
-        print(f"🚁 Task-Based Circle Patrol Drone {self.drone_id} initialized")
+        print(f"🚁 Centralized Task-Based Circle Patrol Drone {self.drone_id} initialized")
         print(f"   Target altitude: {self.target_altitude}m")
-        print(f"   Task file: {self.task_file}")
-        print(f"   Checking if task file exists: {os.path.exists(self.task_file)}")
+        print(f"   Task pool file: {self.task_pool_file}")
+        print(f"   Request file: {self.task_request_file}")
+        print(f"   Complete file: {self.task_complete_file}")
         
-        # Try to load tasks immediately during init
-        if os.path.exists(self.task_file):
-            print(f"   📂 Task file found! Attempting to load...")
-            try:
-                with open(self.task_file, 'r') as f:
-                    data = json.load(f)
-                    self.tasks = data.get('tasks', [])
-                    if self.tasks:
-                        print(f"   ✅ Successfully loaded {len(self.tasks)} tasks during init!")
-                        self.task_state = "EXECUTING"
-                        # Print first task as example
-                        if len(self.tasks) > 0:
-                            print(f"   📋 First task: {self.tasks[0]}")
-                    else:
-                        print(f"   ⚠️  Task file exists but contains 0 tasks")
-            except Exception as e:
-                print(f"   ❌ Error loading tasks during init: {e}")
-        else:
-            print(f"   ⚠️  Task file does not exist yet, will try loading after takeoff")
+        print(f"   📂 Task pool exists: {os.path.exists(self.task_pool_file)}")
+        print(f"   🔄 Ready to request tasks from supervisor")
 
-    def load_tasks(self):
-        """Load tasks from supervisor."""
-        try:
-            print(f"   🔍 Checking: {self.task_file}")
-            print(f"   📂 File exists: {os.path.exists(self.task_file)}")
-            
-            if os.path.exists(self.task_file):
-                print(f"   📖 Reading file...")
-                with open(self.task_file, 'r') as f:
-                    data = json.load(f)
-                    self.tasks = data.get('tasks', [])
-                    if self.tasks:
-                        print(f"   ✅ Loaded {len(self.tasks)} tasks from supervisor")
-                        self.task_state = "EXECUTING"
-                        return True
-                    else:
-                        print(f"   ⚠️  File has 0 tasks")
-            else:
-                print(f"   ⚠️  File not found")
-        except Exception as e:
-            print(f"   ❌ Error loading tasks: {e}")
-            import traceback
-            traceback.print_exc()
-        return False
-    
-    def get_current_task(self):
-        """Get the current task to execute."""
-        if self.current_task_index < len(self.tasks):
-            return self.tasks[self.current_task_index]
-        return None
-    
     def visualize_flight_path(self):
         """Print a comprehensive visual representation of the drone's flight path."""
         if not self.flight_path:
@@ -293,6 +250,84 @@ class TaskBasedCirclePatrolDrone(Robot):
             waypoint_count = (waypoint_count + 1) % self.num_waypoints
         
         return current_circle
+
+    def request_task_from_supervisor(self):
+        """Request a task from the supervisor's centralized pool."""
+        try:
+            # Create task request
+            request_data = {
+                "drone_id": self.drone_id,
+                "timestamp": self.getTime(),
+                "status": "requesting"
+            }
+            
+            # Write request file
+            with open(self.task_request_file, 'w') as f:
+                json.dump(request_data, f, indent=2)
+            
+            # Wait for supervisor response
+            response_file = os.path.join(self.task_dir, f"drone_{self.drone_id}_response.json")
+            max_wait_time = 3.0  # Maximum wait time in seconds
+            wait_start = self.getTime()
+            
+            while self.getTime() - wait_start < max_wait_time:
+                if os.path.exists(response_file):
+                    try:
+                        with open(response_file, 'r') as f:
+                            response_data = json.load(f)
+                        
+                        if response_data.get('status') == 'assigned' and response_data.get('task'):
+                            print(f"📋 Drone {self.drone_id}: Received task {response_data['task']['task_id']}")
+                            # Remove response file after reading to allow future requests
+                            os.remove(response_file)
+                            return response_data['task']
+                        elif response_data.get('status') == 'no_tasks':
+                            print(f"📋 Drone {self.drone_id}: No tasks available")
+                            # Remove response file after reading to allow future requests
+                            os.remove(response_file)
+                            return None
+                    except Exception as e:
+                        print(f"❌ Error reading response: {e}")
+                        break
+                
+                # Small delay before checking again
+                time.sleep(0.05)
+            
+            print(f"⚠️  Drone {self.drone_id}: Timeout waiting for task assignment")
+            return None
+            
+        except Exception as e:
+            print(f"❌ Error requesting task: {e}")
+            return None
+    
+    def complete_current_task(self):
+        """Mark the current task as completed."""
+        if self.current_task is None:
+            return False
+        
+        try:
+            # Create completion notification
+            complete_data = {
+                "drone_id": self.drone_id,
+                "task_id": self.current_task['task_id'],
+                "timestamp": self.getTime(),
+                "status": "completed"
+            }
+            
+            # Write completion file
+            with open(self.task_complete_file, 'w') as f:
+                json.dump(complete_data, f, indent=2)
+            
+            # Supervisor will process the completion file
+            
+            print(f"✅ Drone {self.drone_id}: Completed task {self.current_task['task_id']} - {self.current_task['description']}")
+            self.completed_tasks.append(self.current_task)
+            self.current_task = None
+            return True
+            
+        except Exception as e:
+            print(f"❌ Drone {self.drone_id}: Error completing task: {e}")
+            return False
 
     def show_flight_progress(self):
         """Show current flight progress in real-time."""
@@ -484,104 +519,127 @@ class TaskBasedCirclePatrolDrone(Robot):
                 if altitude > self.target_altitude - 1:
                     self.flight_phase = "PATROL"
                     print(f"✅ Drone {self.drone_id}: Reached {self.target_altitude}m - Starting PATROL")
-                    # Try to load tasks
-                    self.load_tasks()
             
             elif self.flight_phase == "PATROL":
                 # Load tasks if not yet loaded
                 if self.task_state == "WAITING_FOR_TASKS":
-                    print(f"⏳ Drone {self.drone_id}: Attempting to load tasks...")
-                    if self.load_tasks():
-                        print(f"📋 Drone {self.drone_id}: Loaded {len(self.tasks)} tasks")
-                        print(f"   First task: {self.tasks[0] if self.tasks else 'None'}")
+                    print(f"⏳ Drone {self.drone_id}: Requesting first circle task from supervisor...")
+                    self.current_task = self.request_task_from_supervisor()
+                    if self.current_task:
+                        print(f"📋 Drone {self.drone_id}: Got circle task - {self.current_task['description']}")
+                        self.task_state = "EXECUTING"
+                        self.current_waypoint_index = 0  # Start with first waypoint
+                        
+                        # Initialize circle data
+                        circle_id = self.current_task.get('circle_id', 0)
+                        self.current_circle_id = circle_id
+                        self.circle_data[circle_id] = {
+                            'center': self.current_task.get('circle_center', [0, 0]),
+                            'radius': 25.0,  # Should match supervisor
+                            'waypoints': [],
+                            'start_time': self.getTime(),
+                            'end_time': self.getTime()
+                        }
+                        
+                        # Enable image capture for circle patrol
+                        self.capturing_images = True
+                        print(f"📸 Image capture ENABLED for Circle {circle_id}")
+                        
+                        # Set camera orientation
+                        if 'camera_yaw' in self.current_task and 'camera_pitch' in self.current_task:
+                            self.set_camera_orientation(
+                                self.current_task['camera_yaw'],
+                                self.current_task['camera_pitch']
+                            )
                     else:
-                        print(f"⚠️  Drone {self.drone_id}: Failed to load tasks, will retry...")
+                        print(f"⚠️  Drone {self.drone_id}: No tasks available yet, will retry...")
                 
-                # Execute tasks
+                # Execute circle patrol tasks
                 elif self.task_state == "EXECUTING":
-                    task = self.get_current_task()
-                    
-                    if task is None:
-                        # All tasks complete
-                        self.task_state = "COMPLETE"
-                        self.flight_phase = "RETURN_HOME"
-                        print(f"\n{'='*70}")
-                        print(f"✅ Drone {self.drone_id}: All tasks complete!")
-                        print(f"🏠 Returning to home position (0, 0)...")
-                        print(f"{'='*70}\n")
+                    # Check if we have a current task
+                    if self.current_task is None:
+                        # Request a new task from supervisor
+                        self.current_task = self.request_task_from_supervisor()
                         
-                        # Show flight path visualization
-                        self.visualize_flight_path()
-                    else:
-                        # Execute current task
-                        task_type = task['type']
-                        
-                        if task_type == "transition":
-                            # Execute transition task (move to circle center)
-                            target_position = task['position']
-                            circle_id = task.get('circle_id', 0)
+                        if self.current_task is None:
+                            # No more tasks available
+                            self.task_state = "COMPLETE"
+                            self.flight_phase = "RETURN_HOME"
+                            print(f"\n{'='*70}")
+                            print(f"✅ Drone {self.drone_id}: All circle tasks complete!")
+                            print(f"🏠 Returning to home position (0, 0)...")
+                            print(f"{'='*70}\n")
                             
-                            if self.getTime() - t1 > 0.1:
-                                yaw_dist, pitch_dist, reached = self.move_to_target(target_position, verbose_target=True)
-                                yaw_disturbance = yaw_dist
-                                pitch_disturbance = pitch_dist
-                                t1 = self.getTime()
-                                
-                                if reached:
-                                    print(f"\n{'='*70}")
-                                    print(f"🎯 STARTING CIRCLE {circle_id} PATROL")
-                                    print(f"{'='*70}")
-                                    print(f"📍 Transitioned to Circle {circle_id} center: ({target_position[0]:.1f}, {target_position[1]:.1f})")
-                                    print(f"🔄 Beginning {self.num_waypoints} waypoint patrol...")
-                                    print(f"📸 Image capture ENABLED for Circle {circle_id}")
-                                    print(f"{'='*70}\n")
-                                    
-                                    # Enable image capture for circle patrol
-                                    self.capturing_images = True
-                                    
-                                    # Set camera orientation if specified
-                                    if 'camera_yaw' in task and 'camera_pitch' in task:
-                                        self.set_camera_orientation(
-                                            task['camera_yaw'],
-                                            task['camera_pitch']
-                                        )
-                                    
-                                    # Update current circle tracking
-                                    self.current_circle_id = circle_id
-                                    
-                                    # Initialize circle data
-                                    if circle_id not in self.circle_data:
-                                        self.circle_data[circle_id] = {
-                                            'center': target_position,
-                                            'radius': 25.0,  # Should match supervisor
-                                            'waypoints': [],
-                                            'start_time': self.getTime(),
-                                            'end_time': self.getTime()
-                                        }
-                                    
-                                    # Add to flight path
-                                    self.flight_path.append(target_position)
-                                    
-                                    # Move to next task
-                                    self.current_task_index += 1
+                            # Show flight path visualization
+                            self.visualize_flight_path()
+                            continue
+                    
+                    # Execute circle patrol task
+                    if self.current_task.get('type') == "circle_patrol":
+                        waypoints = self.current_task.get('waypoints', [])
+                        circle_id = self.current_task.get('circle_id', 0)
                         
-                        elif task_type == "circle_waypoint":
-                            # Execute circle waypoint task
-                            target_position = task['position']
-                            circle_id = task.get('circle_id', 0)
-                            waypoint_id = task.get('waypoint_id', 0)
+                        # Check if we've completed all waypoints in this circle
+                        if self.current_waypoint_index >= len(waypoints):
+                            print(f"\n{'='*70}")
+                            print(f"🎉 DRONE {self.drone_id} COMPLETED CIRCLE {circle_id} PATROL")
+                            print(f"{'='*70}")
+                            print(f"✅ Drone {self.drone_id}: Finished all {len(waypoints)} waypoints")
+                            print(f"📊 Circle {circle_id} completed successfully by Drone {self.drone_id}!")
+                            print(f"{'='*70}\n")
+                            
+                            # Complete this circle task
+                            self.complete_current_task()
+                            
+                            # Request next circle task
+                            self.current_task = self.request_task_from_supervisor()
+                            if self.current_task:
+                                print(f"📋 Drone {self.drone_id}: Got next circle task - {self.current_task['description']}")
+                                self.current_waypoint_index = 0
+                                
+                                # Initialize next circle data
+                                next_circle_id = self.current_task.get('circle_id', 0)
+                                self.current_circle_id = next_circle_id
+                                self.circle_data[next_circle_id] = {
+                                    'center': self.current_task.get('circle_center', [0, 0]),
+                                    'radius': 25.0,
+                                    'waypoints': [],
+                                    'start_time': self.getTime(),
+                                    'end_time': self.getTime()
+                                }
+                                
+                                # Enable image capture for next circle
+                                self.capturing_images = True
+                                print(f"📸 Image capture ENABLED for Circle {next_circle_id}")
+                                
+                                # Set camera orientation
+                                if 'camera_yaw' in self.current_task and 'camera_pitch' in self.current_task:
+                                    self.set_camera_orientation(
+                                        self.current_task['camera_yaw'],
+                                        self.current_task['camera_pitch']
+                                    )
+                            else:
+                                # No more tasks available
+                                self.task_state = "COMPLETE"
+                                self.flight_phase = "RETURN_HOME"
+                                print(f"\n{'='*70}")
+                                print(f"✅ Drone {self.drone_id}: All circle tasks complete!")
+                                print(f"🏠 Returning to home position (0, 0)...")
+                                print(f"{'='*70}\n")
+                                
+                                # Show flight path visualization
+                                self.visualize_flight_path()
+                                continue
+                        else:
+                            # Execute current waypoint
+                            target_position = waypoints[self.current_waypoint_index]
+                            waypoint_id = self.current_waypoint_index + 1
                             
                             # Mark first waypoint as reached for image capture
                             if not self.first_waypoint_reached:
                                 self.first_waypoint_reached = True
                                 print("✅ First waypoint reached! Starting image capture...")
-                                # Enable image capture for first circle
                                 self.capturing_images = True
-                            
-                            # Update current circle tracking
-                            if circle_id != self.current_circle_id:
-                                self.current_circle_id = circle_id
-                                print(f"\n🎯 Now flying Circle {circle_id}")
                             
                             if self.getTime() - t1 > 0.1:
                                 yaw_dist, pitch_dist, reached = self.move_to_target(target_position, verbose_target=True)
@@ -590,14 +648,7 @@ class TaskBasedCirclePatrolDrone(Robot):
                                 t1 = self.getTime()
                                 
                                 if reached:
-                                    print(f"✅ Circle {circle_id} - Waypoint {waypoint_id}: ({target_position[0]:.1f}, {target_position[1]:.1f})")
-                                    
-                                    # Set camera orientation if specified
-                                    if 'camera_yaw' in task and 'camera_pitch' in task:
-                                        self.set_camera_orientation(
-                                            task['camera_yaw'],
-                                            task['camera_pitch']
-                                        )
+                                    print(f"✅ Drone {self.drone_id} - Circle {circle_id} - Waypoint {waypoint_id}/{len(waypoints)}: ({target_position[0]:.1f}, {target_position[1]:.1f})")
                                     
                                     # Add to flight path
                                     self.flight_path.append(target_position)
@@ -607,22 +658,8 @@ class TaskBasedCirclePatrolDrone(Robot):
                                         self.circle_data[circle_id]['waypoints'].append(target_position)
                                         self.circle_data[circle_id]['end_time'] = self.getTime()
                                     
-                                    # Move to next task
-                                    self.current_task_index += 1
-                                    
-                                    # Check if this was the last waypoint of the circle
-                                    next_task = self.get_current_task()
-                                    if next_task is None or next_task.get('circle_id', 0) != circle_id:
-                                        print(f"🏁 Completed Circle {circle_id} patrol!")
-                                        print(f"📸 Image capture DISABLED - transitioning between circles")
-                                        
-                                        # Disable image capture during transitions
-                                        self.capturing_images = False
-                                        
-                                        if next_task and next_task.get('type') == 'transition':
-                                            print(f"🔄 Transitioning to Circle {next_task.get('circle_id', 0)}...")
-                                        elif next_task is None:
-                                            print(f"🏠 All circles complete - returning home")
+                                    # Move to next waypoint
+                                    self.current_waypoint_index += 1
             
             elif self.flight_phase == "RETURN_HOME":
                 # Navigate back to home position (0, 0)
