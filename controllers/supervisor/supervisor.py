@@ -1,9 +1,9 @@
 """
-Supervisor Controller for Lawnmower Mapping Mission
+Supervisor Controller for Circle Patrol Mission
 
 This supervisor:
 1. Spawns a single drone
-2. Generates lawnmower pattern tasks (systematic grid scanning)
+2. Generates circle patrol tasks (waypoint-based circular flight)
 3. Assigns tasks to the drone via JSON file
 4. Monitors mission progress
 """
@@ -13,8 +13,8 @@ import sys
 import os
 import json
 
-class LawnmowerMissionSupervisor(Supervisor):
-    """Supervisor that manages lawnmower pattern mapping missions."""
+class CirclePatrolMissionSupervisor(Supervisor):
+    """Supervisor that manages circle patrol missions."""
     
     def __init__(self):
         super().__init__()
@@ -25,19 +25,12 @@ class LawnmowerMissionSupervisor(Supervisor):
         self.spawn_position = [0, 0, 0.3]  # Spawn location (always 0, 0)
         self.drones = []  # List to store drone references
         
-        # Grid bounds: x: -15 to -50, y: -10 to 30
-        self.grid_x_min = -50
-        self.grid_x_max = -15
-        self.grid_y_min = -10
-        self.grid_y_max = 30
-        
-        # Calculate first task start position (corner closest to 0,0, offset by 10m outside)
-        # Corner closest to (0,0) is (grid_x_max, grid_y_min) = (-15, -10)
-        self.first_task_start_x = self.grid_x_max + 10  # -15 + 10 = -5
-        self.first_task_start_y = self.grid_y_min + 10  # -10 + 10 = 0
-        
-        # Lawnmower pattern parameters
-        self.scan_y_increment = 20  # Y spacing between scan lines
+        # Circle patrol parameters
+        self.target_center = [-25.35, 0]  # Center of main area
+        self.circle_radius = 25.0  # Radius of each sub-circle (reduced from 50m)
+        self.num_waypoints = 8  # Number of waypoints per circle
+        self.num_circles = 4  # Number of overlapping sub-circles
+        self.overlap_percentage = 0.5  # 50% overlap between circles
         self.camera_yaw = 90  # Camera faces 90 degrees right
         self.camera_pitch = 45  # Camera tilted down 45 degrees
         
@@ -49,101 +42,94 @@ class LawnmowerMissionSupervisor(Supervisor):
         os.makedirs(self.task_dir, exist_ok=True)
         
         print("=" * 70)
-        print("🎯 LAWNMOWER MAPPING MISSION SUPERVISOR")
+        print("🎯 CIRCLE PATROL MISSION SUPERVISOR")
         print("=" * 70)
         print(f"📊 Configuration:")
         print(f"   Number of drones: {self.num_drones}")
         print(f"   Spawn position: {self.spawn_position}")
-        print(f"   First task start: ({self.first_task_start_x}, {self.first_task_start_y})")
-        print(f"   Grid bounds: X[{self.grid_x_min}, {self.grid_x_max}], Y[{self.grid_y_min}, {self.grid_y_max}]")
+        print(f"   Main area center: {self.target_center}")
+        print(f"   Sub-circle radius: {self.circle_radius}m")
+        print(f"   Number of sub-circles: {self.num_circles}")
+        print(f"   Waypoints per circle: {self.num_waypoints}")
+        print(f"   Overlap percentage: {self.overlap_percentage*100}%")
         print(f"   Camera orientation: yaw={self.camera_yaw}°, pitch={self.camera_pitch}°")
         print(f"   Task directory: {self.task_dir}")
         print("=" * 70)
     
-    def generate_lawnmower_tasks(self, drone_id):
-        """Generate lawnmower pattern scanning tasks (both X and Y axis)."""
+    def generate_circle_tasks(self, drone_id):
+        """Generate multiple overlapping sub-circle patrol tasks."""
+        import math
+        
         tasks = []
         
-        # X-axis scan positions (horizontal lines at different Y values)
-        y_positions = []
-        current_y = self.grid_y_min
-        while current_y <= self.grid_y_max:
-            y_positions.append(current_y)
-            current_y += self.scan_y_increment
+        print(f"\n📋 Generating multi-circle patrol tasks for drone {drone_id}:")
+        print(f"   Main area center: {self.target_center}")
+        print(f"   Sub-circle radius: {self.circle_radius}m")
+        print(f"   Number of sub-circles: {self.num_circles}")
+        print(f"   Overlap: {self.overlap_percentage*100}%")
         
-        # Y-axis scan positions (vertical lines at different X values)
-        x_positions = []
-        current_x = self.grid_x_min
-        while current_x <= self.grid_x_max:
-            x_positions.append(current_x)
-            current_x += self.scan_y_increment  # Use same spacing
+        # Calculate circle centers with 50% overlap
+        # For 50% overlap: distance between centers = radius (not 2*radius)
+        circle_spacing = self.circle_radius * (1 - self.overlap_percentage)  # 12.5m for 50% overlap
         
-        print(f"\n📋 Generating lawnmower tasks for drone {drone_id}:")
-        print(f"   Grid: X[{self.grid_x_min}, {self.grid_x_max}], Y[{self.grid_y_min}, {self.grid_y_max}]")
-        print(f"   Horizontal scan lines (Y positions): {y_positions}")
-        print(f"   Vertical scan lines (X positions): {x_positions}")
+        # Generate circle centers in a grid pattern
+        circle_centers = []
+        grid_size = int(math.ceil(math.sqrt(self.num_circles)))
         
-        # ========== HORIZONTAL SCANS (X-axis movement) ==========
-        print(f"\n   📍 Generating horizontal scans (moving along X-axis)...")
-        for i, y in enumerate(y_positions):
-            # We start outside the grid, scan left past the grid
-            start_x = self.grid_x_max + 10  # -15 + 10 = -5 (outside, near side)
-            end_x = self.grid_x_min - 10     # -50 - 10 = -60 (outside, far side)
+        for i in range(self.num_circles):
+            row = i // grid_size
+            col = i % grid_size
             
-            # Task: Scan from x=-5 to x=-60 (left, through the grid)
-            tasks.append({
-                "type": "scan",
-                "start": [start_x, y],
-                "end": [end_x, y],
-                "camera_yaw": self.camera_yaw,
-                "camera_pitch": self.camera_pitch,
-                "description": f"Horizontal scan {i+1}: x={start_x} to {end_x}, y={y}"
-            })
-            print(f"      Task {len(tasks)}: scan from ({start_x}, {y}) to ({end_x}, {y})")
+            # Calculate center position relative to main target
+            center_x = self.target_center[0] + (col - grid_size/2 + 0.5) * circle_spacing
+            center_y = self.target_center[1] + (row - grid_size/2 + 0.5) * circle_spacing
             
-            # Task: Scan back from x=-60 to x=-5 (right, back through grid)
-            tasks.append({
-                "type": "scan",
-                "start": [end_x, y],
-                "end": [start_x, y],
-                "camera_yaw": self.camera_yaw,
-                "camera_pitch": self.camera_pitch,
-                "description": f"Horizontal scan {i+1} return: x={end_x} to {start_x}, y={y}"
-            })
-            print(f"      Task {len(tasks)}: scan from ({end_x}, {y}) to ({start_x}, {y})")
+            circle_centers.append([center_x, center_y])
         
-        # ========== VERTICAL SCANS (Y-axis movement) ==========
-        print(f"\n   📍 Generating vertical scans (moving along Y-axis)...")
-        for i, x in enumerate(x_positions):
-            # We start outside the grid, scan from bottom to top
-            start_y = self.grid_y_min - 10  # -10 - 10 = -20 (outside, bottom)
-            end_y = self.grid_y_max + 10    # 30 + 10 = 40 (outside, top)
-            
-            # Task: Scan from y=-20 to y=40 (upward, through the grid)
-            tasks.append({
-                "type": "scan",
-                "start": [x, start_y],
-                "end": [x, end_y],
-                "camera_yaw": self.camera_yaw,
-                "camera_pitch": self.camera_pitch,
-                "description": f"Vertical scan {i+1}: y={start_y} to {end_y}, x={x}"
-            })
-            print(f"      Task {len(tasks)}: scan from ({x}, {start_y}) to ({x}, {end_y})")
-            
-            # Task: Scan back from y=40 to y=-20 (downward, back through grid)
-            tasks.append({
-                "type": "scan",
-                "start": [x, end_y],
-                "end": [x, start_y],
-                "camera_yaw": self.camera_yaw,
-                "camera_pitch": self.camera_pitch,
-                "description": f"Vertical scan {i+1} return: y={end_y} to {start_y}, x={x}"
-            })
-            print(f"      Task {len(tasks)}: scan from ({x}, {end_y}) to ({x}, {start_y})")
+        print(f"   Circle centers: {circle_centers}")
         
-        print(f"\n✅ Generated {len(tasks)} tasks total")
-        print(f"   - Horizontal scans: {len(y_positions) * 2} tasks")
-        print(f"   - Vertical scans: {len(x_positions) * 2} tasks")
+        # Generate waypoints for each circle
+        for circle_idx, circle_center in enumerate(circle_centers):
+            print(f"\n   🎯 Generating Circle {circle_idx + 1}/{self.num_circles} at ({circle_center[0]:.1f}, {circle_center[1]:.1f})")
+            
+            # Add transition task to move to circle center first
+            if circle_idx == 0:
+                # First circle - go directly to first waypoint
+                first_angle = 0
+            else:
+                # Subsequent circles - add transition waypoint to circle center
+                tasks.append({
+                    "type": "transition",
+                    "position": circle_center,
+                    "camera_yaw": self.camera_yaw,
+                    "camera_pitch": self.camera_pitch,
+                    "description": f"Transition to Circle {circle_idx + 1} center",
+                    "circle_id": circle_idx + 1
+                })
+                print(f"      Transition task: Move to Circle {circle_idx + 1} center")
+                first_angle = 0
+            
+            # Generate waypoints around this circle
+            for waypoint_idx in range(self.num_waypoints):
+                angle = 2 * math.pi * waypoint_idx / self.num_waypoints
+                x = circle_center[0] + self.circle_radius * math.cos(angle)
+                y = circle_center[1] + self.circle_radius * math.sin(angle)
+                
+                # Create waypoint task
+                tasks.append({
+                    "type": "circle_waypoint",
+                    "position": [x, y],
+                    "camera_yaw": self.camera_yaw,
+                    "camera_pitch": self.camera_pitch,
+                    "description": f"Circle {circle_idx + 1} - Waypoint {waypoint_idx + 1}/{self.num_waypoints}: ({x:.1f}, {y:.1f})",
+                    "circle_id": circle_idx + 1,
+                    "waypoint_id": waypoint_idx + 1
+                })
+                print(f"      Waypoint {waypoint_idx + 1}: ({x:.1f}, {y:.1f})")
+        
+        print(f"\n✅ Generated {len(tasks)} total tasks across {self.num_circles} circles")
+        print(f"   - Transition tasks: {self.num_circles - 1}")
+        print(f"   - Circle waypoint tasks: {self.num_circles * self.num_waypoints}")
         return tasks
     
     def assign_tasks_to_drone(self, drone_id, tasks):
@@ -152,7 +138,7 @@ class LawnmowerMissionSupervisor(Supervisor):
         
         data = {
             "drone_id": drone_id,
-            "mission_type": "lawnmower",
+            "mission_type": "circle_patrol",
             "num_tasks": len(tasks),
             "tasks": tasks
         }
@@ -241,11 +227,11 @@ class LawnmowerMissionSupervisor(Supervisor):
     
     def run(self):
         """Main supervisor control loop."""
-        print("\n🚀 Starting lawnmower mapping mission...")
+        print("\n🚀 Starting multi-circle patrol mission...")
         
         # Generate and assign tasks BEFORE spawning drone
-        print("\n📋 Generating lawnmower tasks...")
-        tasks = self.generate_lawnmower_tasks(drone_id=0)
+        print("\n📋 Generating circle patrol tasks...")
+        tasks = self.generate_circle_tasks(drone_id=0)
         
         print("\n📤 Writing tasks to file...")
         if not self.assign_tasks_to_drone(drone_id=0, tasks=tasks):
@@ -299,7 +285,7 @@ class LawnmowerMissionSupervisor(Supervisor):
                         print("\n" + "=" * 70)
                         print("🎉 MISSION COMPLETE!")
                         print("=" * 70)
-                        print(f"✅ Drone completed lawnmower mapping mission")
+                        print(f"✅ Drone completed multi-circle patrol mission")
                         print(f"⏱️  Total mission time: {current_time:.1f} seconds")
                         print("=" * 70)
                         break
@@ -307,5 +293,5 @@ class LawnmowerMissionSupervisor(Supervisor):
                 pass
 
 if __name__ == "__main__":
-    supervisor = LawnmowerMissionSupervisor()
+    supervisor = CirclePatrolMissionSupervisor()
     supervisor.run()
