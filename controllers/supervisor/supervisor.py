@@ -21,7 +21,7 @@ class CirclePatrolMissionSupervisor(Supervisor):
         self.time_step = int(self.getBasicTimeStep())
         
         # Mission configuration
-        self.num_drones = 1  # Single drone for now
+        self.num_drones = 3  # Single drone for now
         self.spawn_position = [0, 0, 0.3]  # Spawn location (always 0, 0)
         self.drones = []  # List to store drone references
         
@@ -132,6 +132,29 @@ class CirclePatrolMissionSupervisor(Supervisor):
         print(f"   - Circle waypoint tasks: {self.num_circles * self.num_waypoints}")
         return tasks
     
+    def partition_by_circle_round_robin(self, tasks, num_drones):
+        """Group tasks by circle_id and assign circles to drones in round-robin.
+        Returns: {drone_index: [tasks...]}"""
+        from collections import defaultdict
+        circles = defaultdict(list)
+        for t in tasks:
+            cid = t.get('circle_id', 0)
+            circles[cid].append(t)
+
+        # Build empty buckets per drone
+        buckets = {i: [] for i in range(num_drones)}
+
+        # Assign circles 1..N in round-robin; leave cid=0 (misc) to drone_0
+        circle_ids = sorted([c for c in circles.keys() if c != 0])
+        for i, cid in enumerate(circle_ids):
+            buckets[i % num_drones].extend(circles[cid])
+
+        # Any cid=0 (misc/transitionless) tasks go to drone_0
+        if 0 in circles:
+            buckets[0].extend(circles[0])
+
+        return buckets
+    
     def assign_tasks_to_drone(self, drone_id, tasks):
         """Write tasks to JSON file for drone to read."""
         task_file = os.path.join(self.task_dir, f"drone_{drone_id}_tasks.json")
@@ -152,67 +175,54 @@ class CirclePatrolMissionSupervisor(Supervisor):
             print(f"❌ Error assigning tasks: {e}")
             return False
         
-    def spawn_drones(self):
-        """Spawn single drone at spawn position."""
-        print("\n🚁 Spawning drone...")
-        
+    def spawn_drones(self, num_drones):
+        """Spawn N drones with small XY offsets to avoid overlap."""
+        print(f"\n🚁 Spawning {num_drones} drones...")
         try:
-            # Get the root node
             root = self.getRoot()
-            if root is None:
-                print("   ❌ ERROR: Could not get root node!")
-                print("   Make sure the supervisor has 'supervisor TRUE' field set")
-                return False
-            
             children_field = root.getField('children')
             if children_field is None:
                 print("   ❌ ERROR: Could not get children field!")
                 return False
-            
-            # Spawn single drone at spawn_position
-            x, y, z = self.spawn_position
-            
-            # Create drone definition string with high-quality camera settings
-            drone_def = f"""DEF DRONE_0 Mavic2Pro {{
-  translation {x} {y} {z}
-  rotation 0 0 1 0
-  name "drone_0"
-  controller "patrol_with_images"
-  controllerArgs []
-  cameraSlot [
-    Camera {{
-      width 1920
-      height 1080
-      antiAliasing TRUE
-      motionBlur 0
-      noise 0
-      lens Lens {{
-        radialCoefficients 0 0
-        tangentialCoefficients 0 0
-      }}
-    }}
-  ]
-}}"""
-            
-            print(f"   📝 Creating drone_0 at spawn position...")
-            
-            # Import drone into the world
-            try:
+
+            for i in range(num_drones):
+                # offset each drone a little so props don't collide on takeoff
+                x = 3.0 * i
+                y = -3.0 * i
+                z = self.spawn_position[2]
+                name = f"drone_{i}"
+
+                drone_def = f"""DEF {name.upper()} Mavic2Pro {{
+    translation {x} {y} {z}
+    rotation 0 0 1 0
+    name "{name}"
+    controller "patrol_with_images"
+    controllerArgs []
+    cameraSlot [
+        Camera {{
+        width 1920
+        height 1080
+        antiAliasing TRUE
+        motionBlur 0
+        noise 0
+        lens Lens {{
+            radialCoefficients 0 0
+            tangentialCoefficients 0 0
+        }}
+        }}
+    ]
+    }}"""
                 children_field.importMFNodeFromString(-1, drone_def)
-                print(f"   ✅ Spawned drone_0 at ({x:.1f}, {y:.1f}, {z:.1f})")
-                print(f"   📍 Drone will fly to first task start: ({self.first_task_start_x:.1f}, {self.first_task_start_y:.1f})")
-            except Exception as e:
-                print(f"   ❌ ERROR spawning drone_0: {e}")
-                return False
-            
-            print(f"\n✅ Drone spawned successfully!")
+                print(f"   ✅ Spawned {name} at ({x:.1f}, {y:.1f}, {z:.1f})")
+
+            print(f"\n✅ All {num_drones} drones spawned successfully!")
             return True
-            
+
         except Exception as e:
             print(f"   ❌ CRITICAL ERROR in spawn_drones: {e}")
-            import traceback
-            traceback.print_exc()
+            import traceback; traceback.print_exc()
             return False
+
     
     def monitor_mission(self):
         """Monitor the mission progress."""
@@ -228,69 +238,88 @@ class CirclePatrolMissionSupervisor(Supervisor):
     def run(self):
         """Main supervisor control loop."""
         print("\n🚀 Starting multi-circle patrol mission...")
-        
-        # Generate and assign tasks BEFORE spawning drone
+
+        # 1) Generate ALL tasks once (full mission)
         print("\n📋 Generating circle patrol tasks...")
-        tasks = self.generate_circle_tasks(drone_id=0)
-        
-        print("\n📤 Writing tasks to file...")
-        if not self.assign_tasks_to_drone(drone_id=0, tasks=tasks):
-            print("❌ Failed to assign tasks!")
+        all_tasks = self.generate_circle_tasks(drone_id=0)
+
+        # 2) Partition tasks by circle (round-robin) across N drones
+        print(f"\n🧩 Partitioning {len(all_tasks)} tasks across {self.num_drones} drones (round-robin by circle)...")
+        buckets = self.partition_by_circle_round_robin(all_tasks, self.num_drones)
+        for i in range(self.num_drones):
+            print(f"   • Drone {i} gets {len(buckets[i])} tasks")
+
+        # 3) Write a JSON file per drone
+        print("\n📤 Writing per-drone task files...")
+        ok = True
+        for i in range(self.num_drones):
+            ok &= self.assign_tasks_to_drone(drone_id=i, tasks=buckets[i])
+        if not ok:
+            print("❌ Failed to assign at least one drone's tasks!")
             return
-        
-        print(f"✅ Tasks ready: {len(tasks)} tasks written to file")
-        
-        # Now spawn the drone (it will load tasks immediately on init)
-        print("\n🚁 Spawning drone (will load tasks on startup)...")
-        spawn_success = self.spawn_drones()
-        
+        print("✅ Per-drone task files written")
+
+        # 4) Spawn N drones; each controller reads its own 'drone_{i}_tasks.json'
+        print("\n🚁 Spawning drones (they will load tasks on startup)...")
+        spawn_success = self.spawn_drones(self.num_drones)
         if not spawn_success:
-            print("\n❌ Failed to spawn drone. Exiting...")
+            print("\n❌ Failed to spawn drones. Exiting...")
             print("\n🔧 Troubleshooting:")
             print("   1. Make sure supervisor robot has 'supervisor TRUE' field")
             print("   2. Check that Mavic2Pro PROTO is in IMPORTABLE EXTERNPROTO list")
-            print("   3. Verify patrol_dynamic controller exists")
+            print("   3. Verify 'patrol_with_images' controller exists and is your task-based Python")
             print("   4. Check console for specific error messages")
             return
-        
-        # Wait for drone to initialize
-        print("\n⏳ Waiting for drone to initialize...")
+
+        # 5) Small wait for drones to initialize
+        print("\n⏳ Waiting for drones to initialize...")
         for _ in range(30):
             self.step(self.time_step)
-        
+
         print("\n✅ Mission started!")
-        print(f"📋 Total tasks: {len(tasks)}")
+        print(f"📋 Total tasks: {len(all_tasks)} (across {self.num_drones} drones)")
         print(f"⏱️  Monitoring every 5s")
         print("\n" + "=" * 70)
-        
-        # Main monitoring loop
-        last_monitor_time = 0
-        monitor_interval = 5.0  # Monitor every 5 seconds
-        
+
+        # --- Monitoring loop (kept simple, like your original) ---
+        last_monitor_time = 0.0
+        monitor_interval = 5.0  # seconds
+
         while self.step(self.time_step) != -1:
             current_time = self.getTime()
-            
-            # Periodic status monitoring
+
+            # Periodic status monitoring hook
             if current_time - last_monitor_time >= monitor_interval:
                 self.monitor_mission()
                 last_monitor_time = current_time
-            
-            # Check if drone has landed (mission complete)
+
+            # Optional: basic mission-complete check (all drones landed after a while)
             try:
-                drone_node = self.getFromDef("DRONE_0")
-                if drone_node:
-                    pos = drone_node.getPosition()
-                    altitude = pos[2]
-                    if altitude < 0.5 and current_time > 60.0:  # After at least 60 seconds
-                        print("\n" + "=" * 70)
-                        print("🎉 MISSION COMPLETE!")
-                        print("=" * 70)
-                        print(f"✅ Drone completed multi-circle patrol mission")
-                        print(f"⏱️  Total mission time: {current_time:.1f} seconds")
-                        print("=" * 70)
+                all_landed = True
+                for i in range(self.num_drones):
+                    node = self.getFromDef(f"DRONE_{i}")
+                    if not node:
+                        all_landed = False
                         break
+                    pos = node.getPosition()
+                    altitude = pos[2] if pos else 1.0
+                    # Consider "landed" when below 0.5m after 60s mission time
+                    if not (altitude < 0.5 and current_time > 60.0):
+                        all_landed = False
+                        break
+
+                if all_landed:
+                    print("\n" + "=" * 70)
+                    print("🎉 MISSION COMPLETE!")
+                    print("=" * 70)
+                    print(f"✅ All drones completed their patrol and landed")
+                    print(f"⏱️  Total mission time: {current_time:.1f} seconds")
+                    print("=" * 70)
+                    break
             except:
+                # If anything goes wrong with completion detection, just keep monitoring
                 pass
+
 
 if __name__ == "__main__":
     supervisor = CirclePatrolMissionSupervisor()
