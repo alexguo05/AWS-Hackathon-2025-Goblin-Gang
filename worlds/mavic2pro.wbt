@@ -1,0 +1,860 @@
+#VRML_SIM R2025a utf8
+
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/backgrounds/protos/TexturedBackground.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/backgrounds/protos/TexturedBackgroundLight.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/floors/protos/Floor.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/appearances/protos/SandyGround.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/road/protos/Road.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/appearances/protos/Pavement.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/buildings/protos/Windmill.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/buildings/protos/SmallManor.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/factory/manhole/protos/SquareManhole.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/factory/containers/protos/CardboardBox.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/vehicles/protos/tesla/TeslaModel3Simple.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/trees/protos/Pine.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/trees/protos/Forest.proto"
+IMPORTABLE EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/robots/dji/mavic/protos/Mavic2Pro.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/buildings/protos/Carwash.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/buildings/protos/ModernSuburbanHouse.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/buildings/protos/Barn.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/buildings/protos/ResidentialBuildingWithRoundFront.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/buildings/protos/ModernHouse.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/buildings/protos/Museum.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/buildings/protos/Silo.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/buildings/protos/ComposedHouse.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/buildings/protos/BungalowStyleHouse.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/buildings/protos/SimpleBuilding.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/buildings/protos/LargeResidentialTower.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/buildings/protos/FastFoodRestaurant.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/buildings/protos/HouseWithGarage.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/buildings/protos/SimpleTwoFloorsHouse.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/buildings/protos/MotelReception.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/buildings/protos/Church.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/buildings/protos/Hospital.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/buildings/protos/School.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/buildings/protos/Office.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/buildings/protos/Warehouse.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/buildings/protos/BigGlassTower.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/buildings/protos/TheThreeTowers.proto"
+
+WorldInfo {
+  info [
+    "Dense urban center (400m x 400m) with realistic density gradient."
+    "Downtown core with high density, suburban periphery with lower density."
+  ]
+  title "Dense Urban Center Drone Mapping"
+  basicTimeStep 35
+  defaultDamping Damping {
+    linear 0.5
+    angular 0.5
+  }
+}
+Viewpoint {
+  orientation -0.020062233686350364 -0.008707497766162033 0.999760814526238 3.221690972687593
+  position 2.3972764711488423 0.10756152378932171 0.5141749630763428
+  near 0.2
+  followSmoothness 0.2
+}
+TexturedBackground {
+  luminosity 3
+}
+TexturedBackgroundLight {
+}
+Floor {
+  size 400 400  # Original size
+  tileSize 6 6
+  appearance SandyGround {
+  }
+}
+
+# DENSE DOWNTOWN CORE (High-rise district)
+BigGlassTower {
+  translation 0 0 0
+  name "central tower"
+}
+TheThreeTowers {
+  translation 25 0 0
+  rotation 0 0 1 0.7854
+  name "downtown towers east"
+}
+LargeResidentialTower {
+  translation -25 0 0
+  rotation 0 0 1 -0.5236
+  name "downtown towers west"
+}
+LargeResidentialTower {
+  translation 0 25 0
+  rotation 0 0 1 1.0472
+  name "downtown towers north"
+}
+LargeResidentialTower {
+  translation 0 -25 0
+  rotation 0 0 1 -1.5708
+  name "downtown towers south"
+}
+
+# INNER RING - Dense urban (15-40m from center)
+Office {
+  translation 35 15 0
+  name "office building 1"
+}
+Office {
+  translation -35 15 0
+  rotation 0 0 1 1.5708
+  name "office building 2"
+}
+Office {
+  translation 35 -15 0
+  rotation 0 0 1 0.7854
+  name "office building 3"
+}
+Office {
+  translation -35 -15 0
+  rotation 0 0 1 -0.7854
+  name "office building 4"
+}
+Office {
+  translation 15 35 0
+  rotation 0 0 1 0.5236
+  name "office building 5"
+}
+Office {
+  translation -15 35 0
+  rotation 0 0 1 -0.5236
+  name "office building 6"
+}
+Office {
+  translation 15 -35 0
+  rotation 0 0 1 2.0944
+  name "office building 7"
+}
+Office {
+  translation -15 -35 0
+  rotation 0 0 1 -2.0944
+  name "office building 8"
+}
+
+# Civic buildings in inner ring
+Hospital {
+  translation 50 30 0
+  name "city hospital"
+}
+School {
+  translation -50 30 0
+  rotation 0 0 1 0.5236
+  name "downtown school"
+}
+Museum {
+  translation 50 -30 0
+  rotation 0 0 1 -0.5236
+  name "art museum"
+}
+Church {
+  translation -50 -30 0
+  name "central church"
+}
+
+# MIDDLE RING - Mixed use (40-80m from center)
+SimpleBuilding {
+  translation 60 40 0
+  name "commercial plaza 1"
+}
+SimpleBuilding {
+  translation -60 40 0
+  rotation 0 0 1 0.7854
+  name "commercial plaza 2"
+}
+SimpleBuilding {
+  translation 60 -40 0
+  rotation 0 0 1 -0.7854
+  name "commercial plaza 3"
+}
+SimpleBuilding {
+  translation -60 -40 0
+  rotation 0 0 1 1.5708
+  name "commercial plaza 4"
+}
+SimpleBuilding {
+  translation 40 60 0
+  rotation 0 0 1 0.2618
+  name "commercial plaza 5"
+}
+SimpleBuilding {
+  translation -40 60 0
+  rotation 0 0 1 -0.2618
+  name "commercial plaza 6"
+}
+SimpleBuilding {
+  translation 40 -60 0
+  rotation 0 0 1 2.8798
+  name "commercial plaza 7"
+}
+SimpleBuilding {
+  translation -40 -60 0
+  rotation 0 0 1 -2.8798
+  name "commercial plaza 8"
+}
+
+# Mid-rise residential in middle ring
+LargeResidentialTower {
+  translation 70 20 0
+  rotation 0 0 1 -0.2618
+  name "mid residential tower 1"
+}
+LargeResidentialTower {
+  translation -70 20 0
+  rotation 0 0 1 0.2618
+  name "mid residential tower 2"
+}
+LargeResidentialTower {
+  translation 20 70 0
+  rotation 0 0 1 1.8326
+  name "mid residential tower 3"
+}
+LargeResidentialTower {
+  translation -20 70 0
+  rotation 0 0 1 -1.8326
+  name "mid residential tower 4"
+}
+LargeResidentialTower {
+  translation 70 -20 0
+  rotation 0 0 1 0.9163
+  name "mid residential tower 5"
+}
+LargeResidentialTower {
+  translation -70 -20 0
+  rotation 0 0 1 -0.9163
+  name "mid residential tower 6"
+}
+
+# Commercial buildings
+FastFoodRestaurant {
+  translation 80 60 0
+  name "mid fast food 1"
+}
+Carwash {
+  translation -80 60 0
+  rotation 0 0 1 0.5236
+  name "mid carwash 1"
+}
+MotelReception {
+  translation 80 -60 0
+  rotation 0 0 1 1.0472
+  name "mid motel 1"
+}
+FastFoodRestaurant {
+  translation -80 -60 0
+  rotation 0 0 1 -1.0472
+  name "mid fast food 2"
+}
+
+# OUTER RING - Suburban density (80-150m from center)
+ModernSuburbanHouse {
+  translation 100 80 0
+  rotation 0 0 1 0.2618
+  name "suburb house 1"
+}
+HouseWithGarage {
+  translation 120 60 0
+  rotation 0 0 1 -0.5236
+  name "suburb house 2"
+}
+SimpleTwoFloorsHouse {
+  translation 140 40 0
+  name "suburb house 3"
+}
+BungalowStyleHouse {
+  translation 160 20 0
+  rotation 0 0 1 1.0472
+  name "suburb house 4"
+}
+ComposedHouse {
+  translation 140 80 0
+  rotation 0 0 1 -0.7854
+  name "suburb house 5"
+}
+ModernHouse {
+  translation 120 100 0
+  rotation 0 0 1 1.5708
+  name "suburb house 6"
+}
+HouseWithGarage {
+  translation 100 120 0
+  name "suburb house 7"
+}
+SimpleTwoFloorsHouse {
+  translation 80 140 0
+  rotation 0 0 1 0.7854
+  name "suburb house 8"
+}
+BungalowStyleHouse {
+  translation 60 160 0
+  rotation 0 0 1 -1.0472
+  name "suburb house 9"
+}
+ModernSuburbanHouse {
+  translation 40 140 0
+  rotation 0 0 1 2.0944
+  name "suburb house 10"
+}
+ComposedHouse {
+  translation 20 160 0
+  rotation 0 0 1 0.5236
+  name "suburb house 11"
+}
+ModernHouse {
+  translation 80 100 0
+  rotation 0 0 1 -0.2618
+  name "suburb house 12"
+}
+
+# Southwest suburban quadrant
+ModernSuburbanHouse {
+  translation -100 -80 0
+  rotation 0 0 1 2.6180
+  name "sw suburb 1"
+}
+HouseWithGarage {
+  translation -120 -60 0
+  rotation 0 0 1 -2.0944
+  name "sw suburb 2"
+}
+SimpleTwoFloorsHouse {
+  translation -140 -40 0
+  rotation 0 0 1 1.5708
+  name "sw suburb 3"
+}
+BungalowStyleHouse {
+  translation -160 -20 0
+  rotation 0 0 1 -0.9163
+  name "sw suburb 4"
+}
+ComposedHouse {
+  translation -140 -80 0
+  rotation 0 0 1 0.7854
+  name "sw suburb 5"
+}
+ModernHouse {
+  translation -120 -100 0
+  rotation 0 0 1 3.1416
+  name "sw suburb 6"
+}
+HouseWithGarage {
+  translation -100 -120 0
+  rotation 0 0 1 -0.6545
+  name "sw suburb 7"
+}
+SimpleTwoFloorsHouse {
+  translation -80 -140 0
+  rotation 0 0 1 2.4435
+  name "sw suburb 8"
+}
+BungalowStyleHouse {
+  translation -60 -160 0
+  rotation 0 0 1 -1.7453
+  name "sw suburb 9"
+}
+
+# Northwest suburban quadrant
+HouseWithGarage {
+  translation -100 80 0
+  rotation 0 0 1 0.5236
+  name "nw suburb 1"
+}
+ModernSuburbanHouse {
+  translation -120 60 0
+  rotation 0 0 1 1.0472
+  name "nw suburb 2"
+}
+SimpleTwoFloorsHouse {
+  translation -140 40 0
+  rotation 0 0 1 -0.7854
+  name "nw suburb 3"
+}
+BungalowStyleHouse {
+  translation -160 20 0
+  rotation 0 0 1 2.0944
+  name "nw suburb 4"
+}
+ComposedHouse {
+  translation -140 80 0
+  rotation 0 0 1 0.2618
+  name "nw suburb 5"
+}
+ModernHouse {
+  translation -120 100 0
+  rotation 0 0 1 -1.5708
+  name "nw suburb 6"
+}
+HouseWithGarage {
+  translation -100 120 0
+  rotation 0 0 1 1.8326
+  name "nw suburb 7"
+}
+SimpleTwoFloorsHouse {
+  translation -80 140 0
+  rotation 0 0 1 -2.3562
+  name "nw suburb 8"
+}
+BungalowStyleHouse {
+  translation -60 160 0
+  rotation 0 0 1 1.2566
+  name "nw suburb 9"
+}
+
+# Southeast suburban quadrant
+ComposedHouse {
+  translation 100 -80 0
+  rotation 0 0 1 -2.6180
+  name "se suburb 1"
+}
+ModernHouse {
+  translation 120 -60 0
+  rotation 0 0 1 2.0944
+  name "se suburb 2"
+}
+BungalowStyleHouse {
+  translation 140 -40 0
+  rotation 0 0 1 -1.5708
+  name "se suburb 3"
+}
+HouseWithGarage {
+  translation 160 -20 0
+  rotation 0 0 1 0.9163
+  name "se suburb 4"
+}
+SimpleTwoFloorsHouse {
+  translation 140 -80 0
+  rotation 0 0 1 -0.1309
+  name "se suburb 5"
+}
+ModernSuburbanHouse {
+  translation 120 -100 0
+  rotation 0 0 1 -3.1416
+  name "se suburb 6"
+}
+HouseWithGarage {
+  translation 100 -120 0
+  rotation 0 0 1 0.6545
+  name "se suburb 7"
+}
+SimpleTwoFloorsHouse {
+  translation 80 -140 0
+  rotation 0 0 1 -2.4435
+  name "se suburb 8"
+}
+BungalowStyleHouse {
+  translation 60 -160 0
+  rotation 0 0 1 1.7453
+  name "se suburb 9"
+}
+
+# PERIMETER ZONE - Sparse development (150-200m from center)
+Windmill {
+  translation 0 180 0
+  name "north windmill"
+}
+Windmill {
+  translation 180 0 0
+  name "east windmill"
+}
+Windmill {
+  translation 0 -180 0
+  name "south windmill"
+}
+Windmill {
+  translation -180 0 0
+  name "west windmill"
+}
+
+# Industrial/Agricultural perimeter
+Warehouse {
+  translation 160 160 0
+  rotation 0 0 1 0.7854
+  name "ne warehouse"
+}
+Silo {
+  translation -160 160 0
+  name "nw silo"
+}
+Barn {
+  translation -160 -160 0
+  rotation 0 0 1 2.3562
+  name "sw barn"
+}
+Warehouse {
+  translation 160 -160 0
+  rotation 0 0 1 -0.7854
+  name "se warehouse"
+}
+
+# Scattered perimeter buildings
+SmallManor {
+  translation 140 180 0
+  rotation 0 0 1 0.5236
+  name "north manor"
+}
+ModernHouse {
+  translation 180 140 0
+  rotation 0 0 1 -1.5708
+  name "east house"
+}
+BungalowStyleHouse {
+  translation -140 180 0
+  rotation 0 0 1 1.2566
+  name "nw perimeter house"
+}
+SimpleTwoFloorsHouse {
+  translation -180 140 0
+  rotation 0 0 1 0.9163
+  name "west perimeter house"
+}
+ComposedHouse {
+  translation 140 -180 0
+  rotation 0 0 1 -2.0944
+  name "south perimeter house 1"
+}
+ModernSuburbanHouse {
+  translation -140 -180 0
+  rotation 0 0 1 2.6180
+  name "south perimeter house 2"
+}
+
+# ROAD NETWORK
+# Main cross roads
+Road {
+  translation 0 0 0.01
+  width 8
+  numberOfLanes 2
+  wayPoints [
+    -200 0 0
+    200 0 0
+  ]
+  appearance Pavement {
+    type "black stone"
+  }
+  name "main east-west road"
+}
+
+Road {
+  translation 0 0 0.01
+  rotation 0 0 1 1.5708
+  width 8
+  numberOfLanes 2
+  wayPoints [
+    -200 0 0
+    200 0 0
+  ]
+  appearance Pavement {
+    type "black stone"
+  }
+  name "main north-south road"
+}
+
+# Ring roads for urban zones
+Road {
+  translation 0 80 0.01
+  width 6
+  numberOfLanes 2
+  wayPoints [
+    -150 0 0
+    150 0 0
+  ]
+  appearance Pavement {
+    type "black stone"
+  }
+  name "northern ring road"
+}
+
+Road {
+  translation 0 -80 0.01
+  width 6
+  numberOfLanes 2
+  wayPoints [
+    -150 0 0
+    150 0 0
+  ]
+  appearance Pavement {
+    type "black stone"
+  }
+  name "southern ring road"
+}
+
+Road {
+  translation 80 0 0.01
+  rotation 0 0 1 1.5708
+  width 6
+  numberOfLanes 2
+  wayPoints [
+    -150 0 0
+    150 0 0
+  ]
+  appearance Pavement {
+    type "black stone"
+  }
+  name "eastern ring road"
+}
+
+Road {
+  translation -80 0 0.01
+  rotation 0 0 1 1.5708
+  width 6
+  numberOfLanes 2
+  wayPoints [
+    -150 0 0
+    150 0 0
+  ]
+  appearance Pavement {
+    type "black stone"
+  }
+  name "western ring road"
+}
+
+# Suburban connector roads
+Road {
+  translation 0 140 0.01
+  width 4
+  numberOfLanes 1
+  wayPoints [
+    -120 0 0
+    120 0 0
+  ]
+  appearance Pavement {
+    type "black stone"
+  }
+  name "north suburban road"
+}
+
+Road {
+  translation 0 -140 0.01
+  width 4
+  numberOfLanes 1
+  wayPoints [
+    -120 0 0
+    120 0 0
+  ]
+  appearance Pavement {
+    type "black stone"
+  }
+  name "south suburban road"
+}
+
+Road {
+  translation 140 0 0.01
+  rotation 0 0 1 1.5708
+  width 4
+  numberOfLanes 1
+  wayPoints [
+    -120 0 0
+    120 0 0
+  ]
+  appearance Pavement {
+    type "black stone"
+  }
+  name "east suburban road"
+}
+
+Road {
+  translation -140 0 0.01
+  rotation 0 0 1 1.5708
+  width 4
+  numberOfLanes 1
+  wayPoints [
+    -120 0 0
+    120 0 0
+  ]
+  appearance Pavement {
+    type "black stone"
+  }
+  name "west suburban road"
+}
+
+# VEHICLES - Distributed by density zones
+# Dense downtown traffic
+TeslaModel3Simple {
+  translation 20 10 0.31
+  rotation 0 0 1 0.7854
+  name "downtown traffic 1"
+}
+TeslaModel3Simple {
+  translation -20 10 0.31
+  rotation 0 0 1 -0.7854
+  name "downtown traffic 2"
+}
+TeslaModel3Simple {
+  translation 10 -20 0.31
+  rotation 0 0 1 -2.3562
+  name "downtown traffic 3"
+}
+TeslaModel3Simple {
+  translation -10 -20 0.31
+  rotation 0 0 1 2.3562
+  name "downtown traffic 4"
+}
+
+# Ring road traffic
+TeslaModel3Simple {
+  translation 80 40 0.31
+  name "ring road traffic 1"
+}
+TeslaModel3Simple {
+  translation -80 40 0.31
+  rotation 0 0 1 3.1416
+  name "ring road traffic 2"
+}
+TeslaModel3Simple {
+  translation 40 80 0.31
+  rotation 0 0 1 1.5708
+  name "ring road traffic 3"
+}
+TeslaModel3Simple {
+  translation -40 -80 0.31
+  rotation 0 0 1 -1.5708
+  name "ring road traffic 4"
+}
+
+# Suburban traffic (sparse)
+TeslaModel3Simple {
+  translation 120 120 0.31
+  rotation 0 0 1 -1.0472
+  name "suburban traffic ne"
+}
+TeslaModel3Simple {
+  translation -120 120 0.31
+  rotation 0 0 1 1.0472
+  name "suburban traffic nw"
+}
+TeslaModel3Simple {
+  translation -120 -120 0.31
+  rotation 0 0 1 0.5236
+  name "suburban traffic sw"
+}
+TeslaModel3Simple {
+  translation 120 -120 0.31
+  rotation 0 0 1 -0.5236
+  name "suburban traffic se"
+}
+
+# GREEN SPACES - Distributed throughout
+Forest {
+  translation 0 0 -0.01
+  shape [
+    200 200
+    200 180
+    180 180
+    180 -180
+    200 -180
+    200 -200
+    -200 -200
+    -200 180
+    -180 180
+    -180 180
+    200 180
+    200 200
+  ]
+  density 0.01
+  type "cherry tree"
+  randomSeed 1
+  maxHeight 8
+  minHeight 4
+  maxRadius 4
+  minRadius 2
+}
+
+# Central park area
+Pine {
+  translation 45 45 0
+  rotation 0 0 1 0.5236
+  name "central park tree 1"
+}
+Pine {
+  translation -45 45 0
+  name "central park tree 2"
+}
+Pine {
+  translation 45 -45 0
+  rotation 0 0 1 -0.7854
+  name "central park tree 3"
+}
+Pine {
+  translation -45 -45 0
+  rotation 0 0 1 2.0944
+  name "central park tree 4"
+}
+
+# Suburban parks
+Pine {
+  translation 110 110 0
+  name "ne park tree"
+}
+Pine {
+  translation -110 110 0
+  name "nw park tree"
+}
+Pine {
+  translation -110 -110 0
+  name "sw park tree"
+}
+Pine {
+  translation 110 -110 0
+  name "se park tree"
+}
+
+# PROPS
+SquareManhole {
+  translation 0 0 -0.03
+}
+CardboardBox {
+  translation -0.730157 -1.22891 0.3
+  rotation 0 0 1 -1.8325953071795862
+}
+CardboardBox {
+  translation 25 30 0.3
+  rotation 0 0 1 0.5236
+}
+CardboardBox {
+  translation -30 25 0.3
+  rotation 0 0 1 -0.7854
+}
+
+# ROBOTS
+Robot {
+  name "supervisor"
+  controller "supervisor"
+  supervisor TRUE
+}
+Mavic2Pro {
+  translation 0 0 0.1
+  controller "grid_path_with_images"
+}
+
+Mavic2Pro {
+  translation 5 5 0.1
+  controller "multi_drone_photographer"
+  name "drone_alpha"
+}
+
+Mavic2Pro {
+  translation -5 5 0.1
+  controller "multi_drone_photographer"
+  name "drone_beta"
+}
+
+Mavic2Pro {
+  translation 5 -5 0.1
+  controller "multi_drone_photographer"
+  name "drone_gamma"
+}
+
+Mavic2Pro {
+  translation -5 -5 0.1
+  controller "multi_drone_photographer"
+  name "drone_delta"
+}
+
+# Coordinator supervisor for monitoring
+Robot {
+  name "coordinator_supervisor"
+  controller "coordinator_monitor"
+  supervisor TRUE
+}
