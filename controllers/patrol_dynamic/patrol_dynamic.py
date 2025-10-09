@@ -21,6 +21,11 @@ except ImportError:
     print("Warning: 'cv2' module not found. Images will not be saved.")
     cv2 = None
 
+try:
+    import paho.mqtt.client as mqtt
+except Exception:
+    mqtt = None
+
 
 def clamp(value, value_min, value_max):
     return min(max(value, value_min), value_max)
@@ -52,6 +57,20 @@ class LawnmowerDrone(Robot):
         self.target_altitude = 35.0  # Flight altitude (increased by 10m)
         self.mapping_altitude = 35.0  # Altitude for mapping tasks
         
+        # Circle mission parameters (activated via MQTT nav.circle)
+        self.circle_active = False
+        self.circle_center = [0.0, 0.0]
+        self.circle_radius = 0.0
+        self.circle_num_waypoints = 8
+        self.circle_waypoints = None
+        self.circle_target_index = 0
+        self.circle_waypoints_initialized = False
+        self.circle_first_waypoint_reached = False
+        self.circle_waypoints_visited = 0
+        self.circle_image_interval_seconds = 10.0
+        self._circle_last_image_time = None
+        self.circle_image_counter = 0
+
         # Task management
         self.tasks = []  # Will be loaded from supervisor
         self.current_task_index = 0
@@ -61,19 +80,14 @@ class LawnmowerDrone(Robot):
         
         # Flight state
         self.flight_phase = "TAKEOFF"  # TAKEOFF -> MAPPING -> RETURN_HOME -> LANDING -> LANDED
-        self.return_home_position = [0, 0]  # Return to spawn location
+        self.return_home_position = [0, 0]  # Will be overwritten with actual spawn XY
+        self.home_position_xy = None  # Captured from initial GPS
         
         # State tracking (same as patrol_with_images)
         self.current_pose = 6 * [0]  # X, Y, Z, roll, pitch, yaw
         self.target_position = [0, 0, 0]
         
-        # Task communication directory (use absolute path relative to project root)
-        # Controllers run from their own directories, so we need to go up to project root
-        controller_dir = os.path.dirname(os.path.abspath(__file__))
-        project_root = os.path.dirname(os.path.dirname(controller_dir))
-        self.task_dir = os.path.join(project_root, "lawnmower_tasks")
-        os.makedirs(self.task_dir, exist_ok=True)
-        self.task_file = os.path.join(self.task_dir, f"drone_{self.drone_id}_tasks.json")
+        # Deprecated: JSON task file flow removed; using MQTT
         
         # Image capture
         if cv2:
@@ -90,28 +104,102 @@ class LawnmowerDrone(Robot):
         
         print(f"🚁 Lawnmower Drone {self.drone_id} initialized")
         print(f"   Target altitude: {self.target_altitude}m")
-        print(f"   Task file: {self.task_file}")
-        print(f"   Checking if task file exists: {os.path.exists(self.task_file)}")
         
-        # Try to load tasks immediately during init
-        if os.path.exists(self.task_file):
-            print(f"   📂 Task file found! Attempting to load...")
+
+        # MQTT subscribe to per-drone tasks/commands (optional)
+        self.mqtt_client = None
+        if mqtt is not None:
             try:
-                with open(self.task_file, 'r') as f:
-                    data = json.load(f)
-                    self.tasks = data.get('tasks', [])
-                    if self.tasks:
-                        print(f"   ✅ Successfully loaded {len(self.tasks)} tasks during init!")
-                        self.task_state = "EXECUTING"
-                        # Print first task as example
-                        if len(self.tasks) > 0:
-                            print(f"   📋 First task: {self.tasks[0]}")
-                    else:
-                        print(f"   ⚠️  Task file exists but contains 0 tasks")
+                self.mqtt_client = mqtt.Client()
+                self.mqtt_client.on_message = self._on_mqtt_message
+                self.mqtt_client.connect("localhost", 1883, 60)
+                self.mqtt_client.subscribe(f"tasks/drone_{self.drone_id}")
+                self.mqtt_client.subscribe(f"cmd/drone_{self.drone_id}/nav/climb")
+                self.mqtt_client.subscribe(f"cmd/drone_{self.drone_id}/nav/circle")
+                self.mqtt_client.loop_start()
+                print(f"🔌 MQTT: drone_{self.drone_id} subscribed to tasks/cmd topics")
             except Exception as e:
-                print(f"   ❌ Error loading tasks during init: {e}")
-        else:
-            print(f"   ⚠️  Task file does not exist yet, will try loading after takeoff")
+                print(f"⚠️  MQTT init failed for drone_{self.drone_id}: {e}")
+        
+        # No JSON task loading; tasks arrive via MQTT
+
+    def _on_mqtt_message(self, _client, _userdata, msg):
+        """Handle incoming MQTT messages for tasks/commands."""
+        try:
+            payload_text = msg.payload.decode()
+            data = json.loads(payload_text)
+        except Exception:
+            return
+        msg_type = data.get("type")
+        if msg.topic.endswith("/nav/climb") or msg_type == "nav.climb":
+            args = data.get("args", {})
+            try:
+                dz = float(args.get("dz", 0.0))
+            except Exception:
+                dz = 0.0
+            rate = args.get("rate", 1.0)
+            self._apply_nav_climb(dz, rate)
+            return
+        if msg.topic.endswith("/nav/circle") or msg_type == "nav.circle":
+            args = data.get("args", {})
+            center = args.get("center", [0.0, 0.0])
+            radius = args.get("radius", 0.0)
+            altitude = args.get("altitude", None)
+            if isinstance(center, list) and len(center) >= 2:
+                try:
+                    self.circle_center = [float(center[0]), float(center[1])]
+                    self.circle_radius = float(radius)
+                    if altitude is not None:
+                        self.target_altitude = float(altitude)
+                    # Initialize circle waypoints from current position
+                    self._init_circle_waypoints_from_current()
+                    self.circle_active = True
+                    print(f"🟢 Drone {self.drone_id}: nav.circle center={self.circle_center} radius={self.circle_radius}")
+                except Exception:
+                    pass
+            return
+
+    def _apply_nav_climb(self, dz: float, rate: float):
+        """Adjust target altitude by dz meters (positive up)."""
+        current_altitude = float(self.current_pose[2]) if len(self.current_pose) >= 3 else 0.0
+        new_target = max(0.0, current_altitude + dz)
+        self.target_altitude = new_target
+        print(f"🪁 Drone {self.drone_id}: nav.climb dz={dz} -> target_altitude={new_target:.1f}m")
+
+    def _generate_circle_waypoints(self, start_x: float, start_y: float):
+        """Generate ordered waypoints around circle starting at closest to current position."""
+        if self.circle_radius <= 0.0:
+            return []
+        all_waypoints = []
+        for i in range(self.circle_num_waypoints):
+            angle = 2 * math.pi * i / self.circle_num_waypoints
+            x = self.circle_center[0] + self.circle_radius * math.cos(angle)
+            y = self.circle_center[1] + self.circle_radius * math.sin(angle)
+            all_waypoints.append([x, y])
+        # find closest index
+        min_distance = float('inf')
+        closest_index = 0
+        for i, (wx, wy) in enumerate(all_waypoints):
+            d = math.sqrt((wx - start_x)**2 + (wy - start_y)**2)
+            if d < min_distance:
+                min_distance = d
+                closest_index = i
+        ordered = []
+        for i in range(self.circle_num_waypoints):
+            idx = (closest_index + i) % self.circle_num_waypoints
+            ordered.append(all_waypoints[idx])
+        return ordered
+
+    def _init_circle_waypoints_from_current(self):
+        x_pos = float(self.current_pose[0]) if len(self.current_pose) >= 1 else 0.0
+        y_pos = float(self.current_pose[1]) if len(self.current_pose) >= 2 else 0.0
+        self.circle_waypoints = self._generate_circle_waypoints(x_pos, y_pos)
+        self.circle_target_index = 0
+        self.circle_waypoints_initialized = True
+        self.circle_first_waypoint_reached = False
+        self.circle_waypoints_visited = 0
+        if self.circle_waypoints:
+            print(f"🎯 Drone {self.drone_id}: circle waypoints initialized; first=({self.circle_waypoints[0][0]:.1f}, {self.circle_waypoints[0][1]:.1f})")
 
     def _initialize_devices(self):
         """Initialize all drone devices."""
@@ -136,9 +224,9 @@ class LawnmowerDrone(Robot):
         self.camera_pitch_motor = self.getDevice("camera pitch")
         self.camera_yaw_motor = self.getDevice("camera yaw")
         
-        # Set initial camera position (will be updated based on tasks)
-        self.camera_pitch_motor.setPosition(0.5)  # Tilted down (30 degrees)
-        self.camera_yaw_motor.setPosition(0.0)    # Forward
+        # Set initial camera position (face 90° left, tilted down)
+        self.camera_pitch_motor.setPosition(0.5)           # Tilted down ~30°
+        self.camera_yaw_motor.setPosition(1.57079632679)   # 90° left (π/2 radians)
 
         # Propeller motors
         self.front_left_motor = self.getDevice("front left propeller")
@@ -157,28 +245,7 @@ class LawnmowerDrone(Robot):
         self.current_pose = pos
     
     def load_tasks(self):
-        """Load tasks from supervisor."""
-        try:
-            print(f"   🔍 Checking: {self.task_file}")
-            print(f"   📂 File exists: {os.path.exists(self.task_file)}")
-            
-            if os.path.exists(self.task_file):
-                print(f"   📖 Reading file...")
-                with open(self.task_file, 'r') as f:
-                    data = json.load(f)
-                    self.tasks = data.get('tasks', [])
-                    if self.tasks:
-                        print(f"   ✅ Loaded {len(self.tasks)} tasks from supervisor")
-                        self.task_state = "EXECUTING"
-                        return True
-                    else:
-                        print(f"   ⚠️  File has 0 tasks")
-            else:
-                print(f"   ⚠️  File not found")
-        except Exception as e:
-            print(f"   ❌ Error loading tasks: {e}")
-            import traceback
-            traceback.print_exc()
+        """Deprecated: JSON task flow removed."""
         return False
     
     def get_current_task(self):
@@ -350,6 +417,12 @@ class LawnmowerDrone(Robot):
             x_pos, y_pos, altitude = self.gps.getValues()
             roll_acceleration, pitch_acceleration, _ = self.gyro.getValues()
             self.set_position([x_pos, y_pos, altitude, roll, pitch, yaw])
+
+            # Capture home position once (actual spawn XY) for return
+            if self.home_position_xy is None:
+                self.home_position_xy = [x_pos, y_pos]
+                self.return_home_position = self.home_position_xy
+                print(f"🏠 Drone {self.drone_id}: Home position set to ({x_pos:.1f}, {y_pos:.1f})")
             
             current_time = self.getTime()
             
@@ -364,16 +437,52 @@ class LawnmowerDrone(Robot):
                     self.load_tasks()
             
             elif self.flight_phase == "MAPPING":
-                # Load tasks if not yet loaded
+                # If using MQTT-only, immediately consider tasks as EXECUTING placeholder
                 if self.task_state == "WAITING_FOR_TASKS":
-                    print(f"⏳ Drone {self.drone_id}: Attempting to load tasks...")
-                    if self.load_tasks():
-                        print(f"📋 Drone {self.drone_id}: Loaded {len(self.tasks)} tasks")
-                        print(f"   First task: {self.tasks[0] if self.tasks else 'None'}")
-                    else:
-                        print(f"⚠️  Drone {self.drone_id}: Failed to load tasks, will retry...")
-                
-                # Execute tasks
+                    self.task_state = "EXECUTING"
+
+                # Circle mission handling (takes precedence over legacy tasks)
+                if self.circle_active:
+                    # Initialize waypoints on first pass
+                    if not self.circle_waypoints_initialized:
+                        self._init_circle_waypoints_from_current()
+                    # Move toward current waypoint
+                    if self.circle_waypoints and self.getTime() - t1 > 0.1:
+                        target_xy = self.circle_waypoints[self.circle_target_index]
+                        yaw_dist, pitch_dist, reached = self.move_to_target(target_xy, verbose=False)
+                        yaw_disturbance = yaw_dist
+                        pitch_disturbance = pitch_dist
+                        t1 = self.getTime()
+
+                        # Periodic image capture during circle mission
+                        if self._circle_last_image_time is None:
+                            self._circle_last_image_time = current_time
+                        elif (current_time - self._circle_last_image_time) >= self.circle_image_interval_seconds:
+                            self.save_image(f"circle_{self.circle_image_counter+1}")
+                            self.circle_image_counter += 1
+                            self._circle_last_image_time = current_time
+
+                        if reached:
+                            if not self.circle_first_waypoint_reached:
+                                self.circle_first_waypoint_reached = True
+                                self.circle_waypoints_visited = 1
+                            else:
+                                self.circle_waypoints_visited += 1
+
+                            # Completed one full circle (visited all waypoints)
+                            if self.circle_waypoints_visited >= len(self.circle_waypoints):
+                                print(f"✅ Drone {self.drone_id}: Circle mission complete. Returning home...")
+                                self.circle_active = False
+                                self.flight_phase = "RETURN_HOME"
+                                # Reset circle image timer for next mission
+                                self._circle_last_image_time = None
+                                self.circle_image_counter = 0
+                            else:
+                                self.circle_target_index = (self.circle_target_index + 1) % len(self.circle_waypoints)
+                    # Skip legacy task execution
+                    pass
+
+                # Execute tasks (legacy scan flow retained; not used for nav.climb/circle)
                 elif self.task_state == "EXECUTING":
                     task = self.get_current_task()
                     

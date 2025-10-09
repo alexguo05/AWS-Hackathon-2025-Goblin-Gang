@@ -12,6 +12,10 @@ from controller import Supervisor
 import sys
 import os
 import json
+try:
+    import paho.mqtt.client as mqtt
+except Exception:
+    mqtt = None
 
 class LawnmowerMissionSupervisor(Supervisor):
     """Supervisor that manages lawnmower pattern mapping missions."""
@@ -21,7 +25,7 @@ class LawnmowerMissionSupervisor(Supervisor):
         self.time_step = int(self.getBasicTimeStep())
         
         # Mission configuration
-        self.num_drones = 1  # Single drone for now
+        self.num_drones = 3  # Number of drones to spawn
         self.spawn_position = [0, 0, 0.3]  # Spawn location (always 0, 0)
         self.drones = []  # List to store drone references
         
@@ -41,13 +45,18 @@ class LawnmowerMissionSupervisor(Supervisor):
         self.camera_yaw = 90  # Camera faces 90 degrees right
         self.camera_pitch = 45  # Camera tilted down 45 degrees
         
-        # Task directory (use absolute path relative to project root)
-        # Controllers run from their own directories, so we need to go up to project root
-        controller_dir = os.path.dirname(os.path.abspath(__file__))
-        project_root = os.path.dirname(os.path.dirname(controller_dir))
-        self.task_dir = os.path.join(project_root, "lawnmower_tasks")
-        os.makedirs(self.task_dir, exist_ok=True)
-        
+        # MQTT client (optional; used to publish tasks to drones)
+        self.mqtt_client = None
+        if mqtt is not None:
+            try:
+                self.mqtt_client = mqtt.Client()
+                self.mqtt_client.connect("localhost", 1883, 60)
+                self.mqtt_client.loop_start()
+                print("🔌 MQTT: Connected to localhost:1883")
+            except Exception as e:
+                print(f"⚠️  MQTT connect failed: {e}")
+                self.mqtt_client = None
+
         print("=" * 70)
         print("🎯 LAWNMOWER MAPPING MISSION SUPERVISOR")
         print("=" * 70)
@@ -57,118 +66,11 @@ class LawnmowerMissionSupervisor(Supervisor):
         print(f"   First task start: ({self.first_task_start_x}, {self.first_task_start_y})")
         print(f"   Grid bounds: X[{self.grid_x_min}, {self.grid_x_max}], Y[{self.grid_y_min}, {self.grid_y_max}]")
         print(f"   Camera orientation: yaw={self.camera_yaw}°, pitch={self.camera_pitch}°")
-        print(f"   Task directory: {self.task_dir}")
         print("=" * 70)
-    
-    def generate_lawnmower_tasks(self, drone_id):
-        """Generate lawnmower pattern scanning tasks (both X and Y axis)."""
-        tasks = []
-        
-        # X-axis scan positions (horizontal lines at different Y values)
-        y_positions = []
-        current_y = self.grid_y_min
-        while current_y <= self.grid_y_max:
-            y_positions.append(current_y)
-            current_y += self.scan_y_increment
-        
-        # Y-axis scan positions (vertical lines at different X values)
-        x_positions = []
-        current_x = self.grid_x_min
-        while current_x <= self.grid_x_max:
-            x_positions.append(current_x)
-            current_x += self.scan_y_increment  # Use same spacing
-        
-        print(f"\n📋 Generating lawnmower tasks for drone {drone_id}:")
-        print(f"   Grid: X[{self.grid_x_min}, {self.grid_x_max}], Y[{self.grid_y_min}, {self.grid_y_max}]")
-        print(f"   Horizontal scan lines (Y positions): {y_positions}")
-        print(f"   Vertical scan lines (X positions): {x_positions}")
-        
-        # ========== HORIZONTAL SCANS (X-axis movement) ==========
-        print(f"\n   📍 Generating horizontal scans (moving along X-axis)...")
-        for i, y in enumerate(y_positions):
-            # We start outside the grid, scan left past the grid
-            start_x = self.grid_x_max + 10  # -15 + 10 = -5 (outside, near side)
-            end_x = self.grid_x_min - 10     # -50 - 10 = -60 (outside, far side)
-            
-            # Task: Scan from x=-5 to x=-60 (left, through the grid)
-            tasks.append({
-                "type": "scan",
-                "start": [start_x, y],
-                "end": [end_x, y],
-                "camera_yaw": self.camera_yaw,
-                "camera_pitch": self.camera_pitch,
-                "description": f"Horizontal scan {i+1}: x={start_x} to {end_x}, y={y}"
-            })
-            print(f"      Task {len(tasks)}: scan from ({start_x}, {y}) to ({end_x}, {y})")
-            
-            # Task: Scan back from x=-60 to x=-5 (right, back through grid)
-            tasks.append({
-                "type": "scan",
-                "start": [end_x, y],
-                "end": [start_x, y],
-                "camera_yaw": self.camera_yaw,
-                "camera_pitch": self.camera_pitch,
-                "description": f"Horizontal scan {i+1} return: x={end_x} to {start_x}, y={y}"
-            })
-            print(f"      Task {len(tasks)}: scan from ({end_x}, {y}) to ({start_x}, {y})")
-        
-        # ========== VERTICAL SCANS (Y-axis movement) ==========
-        print(f"\n   📍 Generating vertical scans (moving along Y-axis)...")
-        for i, x in enumerate(x_positions):
-            # We start outside the grid, scan from bottom to top
-            start_y = self.grid_y_min - 10  # -10 - 10 = -20 (outside, bottom)
-            end_y = self.grid_y_max + 10    # 30 + 10 = 40 (outside, top)
-            
-            # Task: Scan from y=-20 to y=40 (upward, through the grid)
-            tasks.append({
-                "type": "scan",
-                "start": [x, start_y],
-                "end": [x, end_y],
-                "camera_yaw": self.camera_yaw,
-                "camera_pitch": self.camera_pitch,
-                "description": f"Vertical scan {i+1}: y={start_y} to {end_y}, x={x}"
-            })
-            print(f"      Task {len(tasks)}: scan from ({x}, {start_y}) to ({x}, {end_y})")
-            
-            # Task: Scan back from y=40 to y=-20 (downward, back through grid)
-            tasks.append({
-                "type": "scan",
-                "start": [x, end_y],
-                "end": [x, start_y],
-                "camera_yaw": self.camera_yaw,
-                "camera_pitch": self.camera_pitch,
-                "description": f"Vertical scan {i+1} return: y={end_y} to {start_y}, x={x}"
-            })
-            print(f"      Task {len(tasks)}: scan from ({x}, {end_y}) to ({x}, {start_y})")
-        
-        print(f"\n✅ Generated {len(tasks)} tasks total")
-        print(f"   - Horizontal scans: {len(y_positions) * 2} tasks")
-        print(f"   - Vertical scans: {len(x_positions) * 2} tasks")
-        return tasks
-    
-    def assign_tasks_to_drone(self, drone_id, tasks):
-        """Write tasks to JSON file for drone to read."""
-        task_file = os.path.join(self.task_dir, f"drone_{drone_id}_tasks.json")
-        
-        data = {
-            "drone_id": drone_id,
-            "mission_type": "lawnmower",
-            "num_tasks": len(tasks),
-            "tasks": tasks
-        }
-        
-        try:
-            with open(task_file, 'w') as f:
-                json.dump(data, f, indent=2)
-            print(f"✅ Tasks assigned to drone {drone_id} via {task_file}")
-            return True
-        except Exception as e:
-            print(f"❌ Error assigning tasks: {e}")
-            return False
         
     def spawn_drones(self):
-        """Spawn single drone at spawn position."""
-        print("\n🚁 Spawning drone...")
+        """Spawn multiple drones at/near the spawn position."""
+        print(f"\n🚁 Spawning {self.num_drones} drones...")
         
         try:
             # Get the root node
@@ -183,15 +85,19 @@ class LawnmowerMissionSupervisor(Supervisor):
                 print("   ❌ ERROR: Could not get children field!")
                 return False
             
-            # Spawn single drone at spawn_position
-            x, y, z = self.spawn_position
-            
-            # Create drone definition string with high-quality camera settings
-            drone_def = f"""DEF DRONE_0 Mavic2Pro {{
+            # Spawn multiple drones with slight Y offsets to avoid overlap
+            x0, y0, z0 = self.spawn_position
+            any_spawned = False
+            for i in range(self.num_drones):
+                x = x0
+                y = y0 + i * 1.0
+                z = z0
+                
+                drone_def = f"""DEF DRONE_{i} Mavic2Pro {{
   translation {x} {y} {z}
   rotation 0 0 1 0
-  name "drone_0"
-  controller "patrol_with_images"
+  name "drone_{i}"
+  controller "patrol_dynamic"
   controllerArgs []
   cameraSlot [
     Camera {{
@@ -207,20 +113,22 @@ class LawnmowerMissionSupervisor(Supervisor):
     }}
   ]
 }}"""
+                
+                print(f"   📝 Creating drone_{i} at spawn vicinity...")
+                try:
+                    children_field.importMFNodeFromString(-1, drone_def)
+                    print(f"   ✅ Spawned drone_{i} at ({x:.1f}, {y:.1f}, {z:.1f})")
+                    print(f"   📍 Drone will fly to first task start: ({self.first_task_start_x:.1f}, {self.first_task_start_y:.1f})")
+                    any_spawned = True
+                except Exception as e:
+                    print(f"   ❌ ERROR spawning drone_{i}: {e}")
+                    continue
             
-            print(f"   📝 Creating drone_0 at spawn position...")
-            
-            # Import drone into the world
-            try:
-                children_field.importMFNodeFromString(-1, drone_def)
-                print(f"   ✅ Spawned drone_0 at ({x:.1f}, {y:.1f}, {z:.1f})")
-                print(f"   📍 Drone will fly to first task start: ({self.first_task_start_x:.1f}, {self.first_task_start_y:.1f})")
-            except Exception as e:
-                print(f"   ❌ ERROR spawning drone_0: {e}")
+            if any_spawned:
+                print(f"\n✅ Drones spawned successfully!")
+                return True
+            else:
                 return False
-            
-            print(f"\n✅ Drone spawned successfully!")
-            return True
             
         except Exception as e:
             print(f"   ❌ CRITICAL ERROR in spawn_drones: {e}")
@@ -243,19 +151,8 @@ class LawnmowerMissionSupervisor(Supervisor):
         """Main supervisor control loop."""
         print("\n🚀 Starting lawnmower mapping mission...")
         
-        # Generate and assign tasks BEFORE spawning drone
-        print("\n📋 Generating lawnmower tasks...")
-        tasks = self.generate_lawnmower_tasks(drone_id=0)
-        
-        print("\n📤 Writing tasks to file...")
-        if not self.assign_tasks_to_drone(drone_id=0, tasks=tasks):
-            print("❌ Failed to assign tasks!")
-            return
-        
-        print(f"✅ Tasks ready: {len(tasks)} tasks written to file")
-        
-        # Now spawn the drone (it will load tasks immediately on init)
-        print("\n🚁 Spawning drone (will load tasks on startup)...")
+        # Now spawn the drones (they will load tasks on startup)
+        print("\n🚁 Spawning drones (will load tasks on startup)...")
         spawn_success = self.spawn_drones()
         
         if not spawn_success:
@@ -273,9 +170,32 @@ class LawnmowerMissionSupervisor(Supervisor):
             self.step(self.time_step)
         
         print("\n✅ Mission started!")
-        print(f"📋 Total tasks: {len(tasks)}")
         print(f"⏱️  Monitoring every 5s")
         print("\n" + "=" * 70)
+
+        # After drones initialized, publish circle task to each via MQTT
+        if self.mqtt_client is not None:
+            try:
+                centers = {
+                    0: [-30.0, -9.0],
+                    1: [-30.0, 19.0],
+                    2: [ -6.0,  4.0],
+                }
+                radius = 30.0
+                base_altitude = 35.0
+                for drone_id in range(self.num_drones):
+                    topic = f"tasks/drone_{drone_id}"
+                    center = centers.get(drone_id, [0.0, 0.0])
+                    altitude = base_altitude + 2.0 * float(drone_id)
+                    payload = {
+                        "id": f"circle-r{int(radius)}-{drone_id}",
+                        "type": "nav.circle",
+                        "args": {"center": center, "radius": radius, "altitude": altitude}
+                    }
+                    self.mqtt_client.publish(topic, json.dumps(payload), qos=1)
+                    print(f"📤 MQTT task -> {topic}: {payload}")
+            except Exception as e:
+                print(f"⚠️  MQTT publish failed: {e}")
         
         # Main monitoring loop
         last_monitor_time = 0
