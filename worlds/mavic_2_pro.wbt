@@ -12,7 +12,6 @@ EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/project
 EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/factory/containers/protos/CardboardBox.proto"
 EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/vehicles/protos/tesla/TeslaModel3Simple.proto"
 EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/trees/protos/Pine.proto"
-EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/trees/protos/Forest.proto"
 IMPORTABLE EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/robots/dji/mavic/protos/Mavic2Pro.proto"
 EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/buildings/protos/Carwash.proto"
 EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/buildings/protos/ModernSuburbanHouse.proto"
@@ -29,6 +28,11 @@ EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/project
 EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/buildings/protos/HouseWithGarage.proto"
 EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/buildings/protos/SimpleTwoFloorsHouse.proto"
 EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/buildings/protos/MotelReception.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/buildings/protos/StripBuilding.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/buildings/protos/ResidentialTower.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/buildings/protos/SuburbanHouse.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/buildings/protos/UBuilding.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/buildings/protos/HollowBuilding.proto"
 
 WorldInfo {
   info [
@@ -43,8 +47,8 @@ WorldInfo {
   }
 }
 Viewpoint {
-  orientation -0.020062233686350364 -0.008707497766162033 0.999760814526238 3.221690972687593
-  position 2.3972764711488423 0.10756152378932171 0.5141749630763428
+  orientation -0.24103966739774618 -0.055602614409553205 0.9689211670779033 3.5163522500866664
+  position 379.88696022791913 164.72615456360072 267.6770488021976
   near 0.2
   followSmoothness 0.2
 }
@@ -59,6 +63,9 @@ Floor {
   appearance SandyGround {
   }
 }
+HollowBuilding {
+  translation 35.93 99.04 0
+}
 ModernSuburbanHouse {
   translation -50.8 -7.26 0
   rotation 0 0 1 -0.523595307179586
@@ -66,6 +73,10 @@ ModernSuburbanHouse {
 Carwash {
   translation -45.5315 22.4147 0.45
   rotation 0 0 1 -0.523595307179586
+}
+ResidentialTower {
+  translation 0 90.64 0
+  name "residential tower(1)"
 }
 Road {
   translation -43.8 9.2 0.01
@@ -99,11 +110,20 @@ Windmill {
   name "windmill(2)"
 }
 HouseWithGarage {
-  translation -49.32 40.85 0
+  translation -55.33 50.31 0
   rotation 0 0 1 -1.5707953071795862
 }
 SimpleTwoFloorsHouse {
-  translation 8.46723 41.417 0
+  translation 13.6643 46.6141 0
+  rotation 0 0 1 -0.785395307179586
+}
+SimpleTwoFloorsHouse {
+  translation -115.588 9.13032 0
+  rotation 0 0 1 -0.785395307179586
+  name "simple two-storey house(1)"
+}
+UBuilding {
+  translation -106.63 98.212 0
   rotation 0 0 1 -0.785395307179586
 }
 Windmill {
@@ -113,6 +133,10 @@ Windmill {
 SmallManor {
   translation -50.35 11.25 0
   rotation 0 0 -1 0.392394
+}
+SuburbanHouse {
+  translation -77.89 -40.88 0
+  name "suburban house(2)"
 }
 SquareManhole {
   translation 0 0 -0.03
@@ -126,15 +150,24 @@ ComposedHouse {
   rotation 0 0 1 2.35619
 }
 ModernSuburbanHouse {
-  translation -20.93 31.69 0
+  translation -20.93 41.95 0
   name "suburban house(1)"
+}
+StripBuilding {
+  translation -124.69 -79.29 0
+  rotation 0 0 1 1.5708
 }
 LargeResidentialTower {
   translation -12.932 12.204 0
   rotation 0 0 1 -1.5707953071795862
 }
+LargeResidentialTower {
+  translation -114.012 -48.206 0
+  rotation 0 0 1 -1.5707953071795862
+  name "residential tower(2)"
+}
 BungalowStyleHouse {
-  translation 17.9166 7.1134 3.07
+  translation 21.4789 11.2111 3.07
   rotation 0 0 1 -0.2618053071795865
 }
 TeslaModel3Simple {
@@ -164,35 +197,15 @@ Pine {
   rotation 0 0 1 -2.6179953071795863
   name "pine tree(2)"
 }
-Forest {
-  translation 0 0 -0.01
-  shape [
-    200 200
-    200 0
-    50 0
-    50 50
-    -50 50
-    -50 -50
-    50 -50
-    50 0
-    200 0
-    200 -200
-    -200 -200
-    -200 200
-  ]
-  density 0.01
-  type "cherry tree"
-  randomSeed 1
-  maxHeight 12
-  minHeight 6
-  maxRadius 6
-  minRadius 3
-}
 Barn {
   translation -30.63 -17.13 0
 }
 ResidentialBuildingWithRoundFront {
   translation -33.03 -40.68 0
+}
+ResidentialBuildingWithRoundFront {
+  translation -112.39 50 0
+  name "residential building(1)"
 }
 Robot {
   name "supervisor"
@@ -200,11 +213,16 @@ Robot {
   supervisor TRUE
 }
 ModernHouse {
-  translation -19.56 55.12 0
+  translation -19.56 67.89 0
 }
 SimpleBuilding {
-  translation 22.7861 -22.974 0
+  translation 34.0752 -35.5093 0
   rotation 0 0 1 0.261799
+}
+SimpleBuilding {
+  translation -54.2025 92.2252 0
+  rotation 0 0 1 0.261799
+  name "building(1)"
 }
 MotelReception {
   translation -51.49 -28.85 0
@@ -212,4 +230,8 @@ MotelReception {
 FastFoodRestaurant {
   translation -6.59717 -14.7025 0
   rotation 0 0 1 1.309
+}
+HouseWithGarage {
+  translation 11 -65.59 0
+  name "house with garage(1)"
 }
