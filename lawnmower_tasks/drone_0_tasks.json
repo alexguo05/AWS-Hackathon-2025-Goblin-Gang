@@ -1,7 +1,7 @@
 {
   "drone_id": 0,
   "mission_type": "circle_patrol",
-  "num_tasks": 17,
+  "num_tasks": 8,
   "tasks": [
     {
       "type": "circle_waypoint",
@@ -97,113 +97,6 @@
       "camera_pitch": 45,
       "description": "Circle 1 - Waypoint 8/8: (-13.9, -23.9)",
       "circle_id": 1,
-      "waypoint_id": 8
-    },
-    {
-      "type": "transition",
-      "position": [
-        -19.1,
-        6.25
-      ],
-      "camera_yaw": 90,
-      "camera_pitch": 45,
-      "description": "Transition to Circle 4 center",
-      "circle_id": 4
-    },
-    {
-      "type": "circle_waypoint",
-      "position": [
-        5.899999999999999,
-        6.25
-      ],
-      "camera_yaw": 90,
-      "camera_pitch": 45,
-      "description": "Circle 4 - Waypoint 1/8: (5.9, 6.2)",
-      "circle_id": 4,
-      "waypoint_id": 1
-    },
-    {
-      "type": "circle_waypoint",
-      "position": [
-        -1.4223304703363127,
-        23.927669529663685
-      ],
-      "camera_yaw": 90,
-      "camera_pitch": 45,
-      "description": "Circle 4 - Waypoint 2/8: (-1.4, 23.9)",
-      "circle_id": 4,
-      "waypoint_id": 2
-    },
-    {
-      "type": "circle_waypoint",
-      "position": [
-        -19.1,
-        31.25
-      ],
-      "camera_yaw": 90,
-      "camera_pitch": 45,
-      "description": "Circle 4 - Waypoint 3/8: (-19.1, 31.2)",
-      "circle_id": 4,
-      "waypoint_id": 3
-    },
-    {
-      "type": "circle_waypoint",
-      "position": [
-        -36.77766952966368,
-        23.92766952966369
-      ],
-      "camera_yaw": 90,
-      "camera_pitch": 45,
-      "description": "Circle 4 - Waypoint 4/8: (-36.8, 23.9)",
-      "circle_id": 4,
-      "waypoint_id": 4
-    },
-    {
-      "type": "circle_waypoint",
-      "position": [
-        -44.1,
-        6.250000000000003
-      ],
-      "camera_yaw": 90,
-      "camera_pitch": 45,
-      "description": "Circle 4 - Waypoint 5/8: (-44.1, 6.3)",
-      "circle_id": 4,
-      "waypoint_id": 5
-    },
-    {
-      "type": "circle_waypoint",
-      "position": [
-        -36.7776695296637,
-        -11.427669529663685
-      ],
-      "camera_yaw": 90,
-      "camera_pitch": 45,
-      "description": "Circle 4 - Waypoint 6/8: (-36.8, -11.4)",
-      "circle_id": 4,
-      "waypoint_id": 6
-    },
-    {
-      "type": "circle_waypoint",
-      "position": [
-        -19.100000000000005,
-        -18.75
-      ],
-      "camera_yaw": 90,
-      "camera_pitch": 45,
-      "description": "Circle 4 - Waypoint 7/8: (-19.1, -18.8)",
-      "circle_id": 4,
-      "waypoint_id": 7
-    },
-    {
-      "type": "circle_waypoint",
-      "position": [
-        -1.4223304703363162,
-        -11.427669529663692
-      ],
-      "camera_yaw": 90,
-      "camera_pitch": 45,
-      "description": "Circle 4 - Waypoint 8/8: (-1.4, -11.4)",
-      "circle_id": 4,
       "waypoint_id": 8
     }
   ]
